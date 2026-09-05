@@ -1,0 +1,6 @@
+{
+  "name": "KIỂM TRA THƯỜNG XUYÊN",
+  "description": "Hệ thống kiểm tra trực tuyến. Tạo và quản lý đề thi linh hoạt, tự động đồng bộ kết quả qua Google Sheets Apps Script, xuất báo cáo ảnh và Excel theo lớp.",
+  "requestFramePermissions": ["notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

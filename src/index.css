@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  header, footer, button, .print\\:hidden {
+    display: none !important;
+  }
+  .fixed {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+  .max-h-\\[92vh\\], .overflow-y-auto {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
