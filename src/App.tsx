@@ -22,6 +22,7 @@ import {
   DEFAULT_EXAM_CONFIG,
   DEFAULT_QUESTIONS,
 } from './data/defaultExamData';
+import { formatScoreItem } from './utils/scoreStringUtils';
 import {
   ExamConfig,
   Question,
@@ -419,17 +420,14 @@ export default function App() {
         totalScore += earned;
 
         const qNumber = index + 1;
-        // Build score string format: "1:0.5 2:0.5 3:1..." hoặc "1:-" nếu học sinh bỏ trống (tương đương 0đ)
-        if (isBlank) {
-          scoreParts.push(`${qNumber}:-`);
-        } else {
-          scoreParts.push(`${qNumber}:${earned}`);
-        }
+        // Build score string format: <Số câu : số điểm : "Đáp án HS chọn / đã gõ"> (Ví dụ: <1 : 0,5 : "A"> <2 : 1 : "Liên kết">)
+        const cleanAnswer = isBlank ? '' : answerText.trim();
+        scoreParts.push(formatScoreItem(qNumber, earned, cleanAnswer));
 
         return {
           questionId: q.id,
           orderNumber: qNumber,
-          studentAnswer: isBlank ? '-' : answerText,
+          studentAnswer: isBlank ? '' : answerText.trim(),
           correctAnswer: q.correctAnswer,
           isCorrect,
           earnedPoints: earned,
@@ -742,6 +740,7 @@ export default function App() {
           onClose={() => setShowPdfModal(false)}
           submission={activeSubmission}
           config={config}
+          questions={questions}
         />
       )}
     </div>

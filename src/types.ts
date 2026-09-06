@@ -43,7 +43,7 @@ export interface SubmissionRecord {
   className: string;
   totalScore: number;
   maxScore: number;
-  scoreString: string; // e.g., "1:0.5 2:0.5 3:1 ..."
+  scoreString: string; // Cấu trúc: <Số câu : số điểm : "Đáp án HS chọn / đã gõ"> (Ví dụ: <1 : 0,5 : "A"> <2 : 1 : "Liên kết">)
   startTime: string; // e.g., "8:00 04/09/2026"
   endTime: string; // e.g., "8:15 04/09/2026"
   totalDuration: string; // e.g., "00:15"
