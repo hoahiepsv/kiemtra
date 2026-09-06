@@ -1,4 +1,5 @@
 import { SubmissionRecord, DraftExam, Question, ExamConfig } from '../types';
+import { formatExamDateTime, formatExamDuration } from './dateUtils';
 
 const DRAFT_STORAGE_KEY = 'kiem_tra_thuong_xuyen_draft';
 const UNSYNCED_STORAGE_KEY = 'kiem_tra_thuong_xuyen_unsynced';
@@ -122,7 +123,10 @@ export async function sendSubmissionToData2(
     timestamp: record.timestamp,
     ip: record.ipAddress || '',
     ipAddress: record.ipAddress || '',
+    ipHocSinh: record.ipAddress || '',
     clientIp: record.ipAddress || '',
+    col9: record.ipAddress || '',
+    ipThueBao: record.ipAddress || '',
   };
 
   try {
@@ -298,6 +302,27 @@ export async function fetchSubmissionsFromData2(data2Url: string): Promise<Submi
             duration = '00:15';
           }
         }
+        const rawIp =
+          item.ipAddress ??
+          item.ipHocSinh ??
+          item['IP học sinh'] ??
+          item['IP Học Sinh'] ??
+          item['ip_hoc_sinh'] ??
+          item['Cột 9'] ??
+          item['cột 9'] ??
+          item.col9 ??
+          item.column9 ??
+          (Array.isArray(item) ? item[8] : undefined) ??
+          item[8] ??
+          item.ip ??
+          item.clientIp ??
+          item.ipThueBao ??
+          item['Địa chỉ IP'] ??
+          item['IP máy tính'] ??
+          item['IP thuê bao'] ??
+          item['IP'] ??
+          '';
+        const parsedIp = typeof rawIp === 'string' ? rawIp.trim() : String(rawIp || '').trim();
         return {
           stt: item.stt || index + 1,
           studentName: item.studentName || 'Học sinh',
@@ -305,10 +330,10 @@ export async function fetchSubmissionsFromData2(data2Url: string): Promise<Submi
           totalScore: Number(item.totalScore) || 0,
           maxScore: 10,
           scoreString: item.scoreString || '',
-          startTime: item.startTime || '',
-          endTime: item.endTime || '',
-          totalDuration: duration,
-          ipAddress: item.ip || item.ipAddress || item.clientIp || '',
+          startTime: formatExamDateTime(item.startTime || (item.totalDuration?.includes('T') ? item.totalDuration : '')),
+          endTime: formatExamDateTime(item.endTime),
+          totalDuration: formatExamDuration(item.totalDuration, item.startTime, item.endTime),
+          ipAddress: parsedIp,
           timestamp: Date.now() - (json.data.length - index) * 60000,
           syncedToData2: true,
           questionResults: [],

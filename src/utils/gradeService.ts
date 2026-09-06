@@ -35,41 +35,66 @@ export function normalizeKeywords(str: string): string {
 }
 
 /**
- * So khớp giá trị học sinh nhập với đáp án chuẩn tự luận:
- * @param studentAnswer Giá trị học sinh nhập
- * @param correctAnswer Từ khóa / đáp án đúng do giáo viên thiết lập
- * @returns boolean - true nếu khớp đáp án
+ * Tách chuỗi các đáp án chấp nhận được thành mảng các đáp án.
+ * Dữ liệu lưu trong data1 theo định dạng: "đáp án 1 / đáp án 2 / ..."
+ * Hỗ trợ dấu phân tách: " / ", "/", "|", ";"
  */
-export function checkEssayAnswerMatch(
-  studentAnswer: string | undefined | null,
-  correctAnswer: string | undefined | null
-): boolean {
-  if (!studentAnswer || !correctAnswer) return false;
+export function parseAcceptableAnswers(correctAnswer: string | undefined | null): string[] {
+  if (!correctAnswer) return [];
+  const raw = String(correctAnswer).trim();
+  if (!raw) return [];
 
-  const rawStudent = String(studentAnswer).trim();
-  const rawCorrect = String(correctAnswer).trim();
-  if (!rawStudent || !rawCorrect) return false;
-
-  // Nếu giáo viên thiết lập nhiều phương án trả lời phân tách bởi | hoặc ; hoặc /
-  // Ví dụ: "1000 | 1.000" hoặc "Bàn phím ; Chuột"
-  if (
-    rawCorrect.includes('|') ||
-    rawCorrect.includes(';') ||
-    (rawCorrect.includes('/') && !/\d\/\d/.test(rawCorrect))
-  ) {
-    const validOptions = rawCorrect
-      .split(/[|;/]/)
-      .map((opt) => opt.trim())
+  // 1. Phân tách theo " / " (dấu gạch chéo chuẩn có khoảng trắng theo định dạng data1)
+  if (raw.includes(' / ')) {
+    const list = raw
+      .split(/\s+\/\s+/)
+      .map((s) => s.trim())
       .filter(Boolean);
-
-    if (validOptions.length > 1) {
-      return validOptions.some((opt) => checkEssayAnswerMatch(rawStudent, opt));
-    }
+    if (list.length > 0) return list;
   }
+
+  // 2. Phân tách theo dấu gạch đứng | hoặc chấm phẩy ;
+  if (raw.includes('|') || raw.includes(';')) {
+    const list = raw
+      .split(/\s*[|;]\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (list.length > 0) return list;
+  }
+
+  // 3. Phân tách theo dấu gạch chéo / thông thường (nếu không phải là phân số đơn lẻ kiểu 1/2 hay 3/4)
+  if (raw.includes('/') && !/^\d+\/\d+$/.test(raw)) {
+    const list = raw
+      .split(/\s*\/\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (list.length > 0) return list;
+  }
+
+  return [raw];
+}
+
+/**
+ * Gộp danh sách các đáp án tương tự / từ đồng nghĩa thành chuỗi lưu vào data1
+ * Định dạng: "đáp án 1 / đáp án 2 / đáp án 3"
+ */
+export function joinAcceptableAnswers(answers: (string | undefined | null)[]): string {
+  if (!answers || answers.length === 0) return '';
+  return answers
+    .map((a) => (a !== undefined && a !== null ? String(a).trim() : ''))
+    .filter(Boolean)
+    .join(' / ');
+}
+
+/**
+ * So khớp một phương án đáp án đơn lẻ với câu trả lời của học sinh
+ */
+function checkSingleEssayMatch(rawStudent: string, rawOption: string): boolean {
+  if (!rawStudent || !rawOption) return false;
 
   // 1. So khớp sau khi chuẩn hóa chữ thường, khử dấu tiếng Việt và thu gọn khoảng trắng thừa
   const sNorm = normalizeKeywords(rawStudent);
-  const cNorm = normalizeKeywords(rawCorrect);
+  const cNorm = normalizeKeywords(rawOption);
   if (sNorm === cNorm) return true;
 
   // 2. So khớp khi loại bỏ hoàn toàn mọi khoảng trắng (VD: "bo nho" vs "bonho", "1 000" vs "1000")
@@ -101,4 +126,30 @@ export function checkEssayAnswerMatch(
   }
 
   return false;
+}
+
+/**
+ * So khớp giá trị học sinh nhập với đáp án chuẩn tự luận:
+ * Khi học sinh gõ 1 trong những đáp án được thiết lập (phân tách bởi /) đều chấm đúng!
+ * @param studentAnswer Giá trị học sinh nhập
+ * @param correctAnswer Từ khóa / chuỗi đáp án chuẩn do giáo viên thiết lập (đáp án 1 / đáp án 2 / ...)
+ * @returns boolean - true nếu học sinh gõ trúng bất kỳ đáp án nào
+ */
+export function checkEssayAnswerMatch(
+  studentAnswer: string | undefined | null,
+  correctAnswer: string | undefined | null
+): boolean {
+  if (!studentAnswer || !correctAnswer) return false;
+
+  const rawStudent = String(studentAnswer).trim();
+  const rawCorrect = String(correctAnswer).trim();
+  if (!rawStudent || !rawCorrect) return false;
+
+  // Tách các đáp án tương tự / từ đồng nghĩa (đáp án 1 / đáp án 2 / ...)
+  const acceptableOptions = parseAcceptableAnswers(rawCorrect);
+
+  if (acceptableOptions.length === 0) return false;
+
+  // Kiểm tra nếu học sinh gõ khớp với BẤT KỲ đáp án tương tự nào -> Đều chấm đúng!
+  return acceptableOptions.some((opt) => checkSingleEssayMatch(rawStudent, opt));
 }

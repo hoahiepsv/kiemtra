@@ -55,6 +55,7 @@ function doGet(e) {
     
     if (lastRow >= 5) {
       // Đọc 9 cột: A (Loại), B (Câu số), C (Nội dung), D (ĐA A), E (ĐA B), F (ĐA C), G (ĐA D), H (ĐA Đúng), I (Điểm)
+      // Lưu ý: Cột H (ĐA Đúng) đối với câu Tự luận lưu dạng: đáp án 1 / đáp án 2 / ... (học sinh gõ 1 trong các đáp án đều chấm đúng)
       var range = sheet.getRange(5, 1, lastRow - 4, 9);
       var values = range.getValues();
       
@@ -212,7 +213,7 @@ export const APPS_SCRIPT_DATA2 = `/**
  * Cột F: THỜI GIAN HS BẮT ĐẦU (vd: 8:00 04/09/2026)
  * Cột G: THỜI GIAN HS NỘP BÀI (vd: 8:15 04/09/2026)
  * Cột H: TỔNG THỜI GIAN (vd: 00:15)
- * Cột I: ĐỊA CHỈ IP MÁY TÍNH (vd: 113.161.x.x)
+ * Cột I: IP HỌC SINH (Cột 9 - IP thuê bao của thiết bị HS sử dụng, vd: 113.169.89.135)
  * =========================================================================
  * HƯỚNG DẪN CÀI ĐẶT TRÊN GOOGLE SHEETS DATA2:
  * 1. Mở Google Sheet lưu kết quả (data2).
@@ -250,7 +251,7 @@ function doPost(e) {
     var startTime = data.startTime || "";
     var endTime = data.endTime || "";
     var totalDuration = data.totalDuration || "";
-    var clientIp = data.ip || data.ipAddress || data.clientIp || "";
+    var clientIp = data.ip || data.ipAddress || data.clientIp || data.ipHocSinh || "";
 
     // Tìm dòng kế tiếp cần ghi
     var lastRow = sheet.getLastRow();
@@ -268,7 +269,7 @@ function doPost(e) {
       }
     }
 
-    // Ghi các cột: A:STT, B:Học sinh, C:Lớp, D:Tổng điểm, E:Điểm từng câu, F:Bắt đầu, G:Nộp bài, H:Tổng thời gian, I:IP máy tính
+    // Ghi các cột: A:STT, B:Học sinh, C:Lớp, D:Tổng điểm, E:Điểm từng câu, F:Bắt đầu, G:Nộp bài, H:Tổng thời gian, I:IP học sinh (Cột 9)
     sheet.getRange(nextRow, 1, 1, 9).setValues([[
       nextSTT,
       studentName,
@@ -287,7 +288,8 @@ function doPost(e) {
       stt: nextSTT,
       row: nextRow,
       studentName: studentName,
-      totalScore: totalScore
+      totalScore: totalScore,
+      clientIp: clientIp
     };
 
     return ContentService.createTextOutput(JSON.stringify(response))
@@ -304,19 +306,37 @@ function doPost(e) {
   }
 }
 
-// Hàm lấy danh sách kết quả học sinh đã nộp để hiển thị Bảng xếp hạng
+// Hàm lấy danh sách kết quả học sinh đã nộp để hiển thị Bảng xếp hạng & Báo cáo
 function doGet(e) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getActiveSheet();
     var lastRow = sheet.getLastRow();
+    var lastCol = Math.max(sheet.getLastColumn(), 9);
     
     var submissions = [];
     if (lastRow >= 2) {
-      var data = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+      // Cột 9 trong sheet data2 là IP học sinh
+      var ipColIdx = 8; // Mặc định cột 9 (chỉ số 8)
+      for (var h = 0; h < headers.length; h++) {
+        var hName = (headers[h] || "").toString().toLowerCase();
+        if (hName.indexOf("ip") !== -1 || hName.indexOf("cột 9") !== -1 || hName.indexOf("cot 9") !== -1) {
+          ipColIdx = h;
+          break;
+        }
+      }
+
+      var data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
       for (var i = 0; i < data.length; i++) {
         var row = data[i];
         if (!row[1]) continue; // Bỏ qua dòng trống tên học sinh
+        // Lấy IP học sinh từ cột 9 trong sheet data2
+        var rawIp = "";
+        if (row[8] !== undefined && row[8] !== null && String(row[8]).trim() !== "") {
+          rawIp = String(row[8]).trim();
+        } else if (row[ipColIdx] !== undefined && row[ipColIdx] !== null) {
+          rawIp = String(row[ipColIdx]).trim();
+        }
         submissions.push({
           stt: row[0] || (i + 1),
           studentName: row[1],
@@ -326,7 +346,7 @@ function doGet(e) {
           startTime: row[5] || "",
           endTime: row[6] || "",
           totalDuration: row[7] || "",
-          ipAddress: row[8] || ""
+          ipAddress: rawIp
         });
       }
     }
@@ -359,19 +379,39 @@ function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
   if (action === "getLeaderboard") {
-    // Lấy bảng xếp hạng từ sheet data2
+    // Lấy bảng xếp hạng & kết quả từ sheet data2
     var sheet2 = ss.getSheetByName("data2") || ss.getActiveSheet();
     var lastRow = sheet2.getLastRow();
+    var lastCol2 = Math.max(sheet2.getLastColumn(), 9);
     var list = [];
     if (lastRow >= 2) {
-      var rows = sheet2.getRange(2, 1, lastRow - 1, 8).getValues();
+      // Cột 9 trong sheet data2 là IP học sinh
+      var headers2 = sheet2.getRange(1, 1, 1, lastCol2).getValues()[0];
+      var ipIdx2 = 8; // Mặc định cột 9 (chỉ số 8)
+      for (var h2 = 0; h2 < headers2.length; h2++) {
+        var hName2 = (headers2[h2] || "").toString().toLowerCase();
+        if (hName2.indexOf("ip") !== -1 || hName2.indexOf("cột 9") !== -1 || hName2.indexOf("cot 9") !== -1) {
+          ipIdx2 = h2;
+          break;
+        }
+      }
+
+      var rows = sheet2.getRange(2, 1, lastRow - 1, lastCol2).getValues();
       for (var i = 0; i < rows.length; i++) {
         var r = rows[i];
         if (!r[1]) continue;
+        // Lấy IP học sinh từ cột 9 trong sheet data2
+        var rIp = "";
+        if (r[8] !== undefined && r[8] !== null && String(r[8]).trim() !== "") {
+          rIp = String(r[8]).trim();
+        } else if (r[ipIdx2] !== undefined && r[ipIdx2] !== null) {
+          rIp = String(r[ipIdx2]).trim();
+        }
         list.push({
           stt: r[0], studentName: r[1], className: r[2],
           totalScore: Number(r[3]) || 0, scoreString: r[4],
-          startTime: r[5], endTime: r[6], totalDuration: r[7]
+          startTime: r[5], endTime: r[6], totalDuration: r[7],
+          ipAddress: rIp
         });
       }
     }
@@ -486,7 +526,7 @@ function doPost(e) {
       nextSTT = isNaN(prevSTT) ? lastRow : prevSTT + 1;
     }
 
-    var clientIp = data.ip || data.ipAddress || data.clientIp || "";
+    var clientIp = data.ip || data.ipAddress || data.clientIp || data.ipHocSinh || "";
 
     sheet.getRange(nextRow, 1, 1, 9).setValues([[
       nextSTT,
