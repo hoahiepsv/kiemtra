@@ -28,6 +28,7 @@ import {
   StudentAnswer,
   SubmissionRecord,
   DraftExam,
+  AdminAuthSession,
 } from './types';
 import {
   saveDraftExam,
@@ -108,6 +109,7 @@ export default function App() {
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [showAdminAuthModal, setShowAdminAuthModal] = useState(false);
   const [showAdminMenuModal, setShowAdminMenuModal] = useState(false);
+  const [adminSession, setAdminSession] = useState<AdminAuthSession | null>(null);
   const [showStudentReportExportModal, setShowStudentReportExportModal] = useState(false);
   const [showClassExcelModal, setShowClassExcelModal] = useState(false);
   const [showExamEditorModal, setShowExamEditorModal] = useState(false);
@@ -116,7 +118,8 @@ export default function App() {
     setShowAdminAuthModal(true);
   };
 
-  const handleAdminAuthSuccess = () => {
+  const handleAdminAuthSuccess = (session: AdminAuthSession) => {
+    setAdminSession(session);
     setShowAdminAuthModal(false);
     setShowAdminMenuModal(true);
   };
@@ -440,7 +443,7 @@ export default function App() {
       maxScore = Math.round(maxScore * 10) / 10;
       const scoreString = scoreParts.join(' ');
 
-      // Lấy IP máy tính đang làm bài để lưu vào cột cuối cùng của data2
+      // Lấy IP học sinh đang làm bài để lưu vào cột 9 của data2
       const clientIp = await fetchClientIp();
 
       const record: SubmissionRecord = {
@@ -611,6 +614,7 @@ export default function App() {
       <Header
         config={config}
         isOnline={isOnline}
+        onOpenAdmin={handleAuthorClick}
         onRequestPush={handleRequestPush}
         notificationsEnabled={notificationsEnabled}
       />
@@ -685,7 +689,12 @@ export default function App() {
       <AdminMenuModal
         isOpen={showAdminMenuModal}
         onClose={() => setShowAdminMenuModal(false)}
-        onSelectAppsScript={() => setShowAppsScriptModal(true)}
+        session={adminSession}
+        onSelectAppsScript={() => {
+          if (adminSession?.permissions?.canManageAppsScript) {
+            setShowAppsScriptModal(true);
+          }
+        }}
         onSelectExportImage={() => setShowStudentReportExportModal(true)}
         onSelectExportExcel={() => setShowClassExcelModal(true)}
         onSelectExamEditor={() => setShowExamEditorModal(true)}

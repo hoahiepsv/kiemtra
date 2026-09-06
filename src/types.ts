@@ -47,7 +47,7 @@ export interface SubmissionRecord {
   startTime: string; // e.g., "8:00 04/09/2026"
   endTime: string; // e.g., "8:15 04/09/2026"
   totalDuration: string; // e.g., "00:15"
-  ipAddress?: string; // IP Internet của máy tính thí sinh
+  ipAddress?: string; // IP thuê bao: là IP thiết bị HS sử dụng (dạng IPv4: 113.169.89.135...)
   timestamp: number;
   syncedToData2: boolean;
   questionResults: {
@@ -79,4 +79,17 @@ export interface DraftExam {
   remainingSeconds: number;
   currentQuestionIndex: number;
   lastSavedAt: string;
+}
+
+export type AdminRole = 'superadmin' | 'subadmin';
+
+export interface AdminAuthSession {
+  role: AdminRole;
+  name: string;
+  permissions: {
+    canEditExam: boolean; // Tạo & chỉnh sửa đề thi
+    canExportImage: boolean; // Xuất báo cáo ảnh
+    canExportExcel: boolean; // Xuất báo cáo xlsx
+    canManageAppsScript: boolean; // Cấu hình Google Sheets & Apps Script
+  };
 }
