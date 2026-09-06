@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import {
   Award,
@@ -15,6 +15,7 @@ import {
 import { Question, SubmissionRecord, ExamConfig } from '../types';
 import { playCompletionFanfare } from '../utils/audio';
 import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
+import { parseScoreStringDetailed } from '../utils/scoreStringUtils';
 
 interface ResultScreenProps {
   config: ExamConfig;
@@ -47,25 +48,30 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
 
   const correctAnswersCount = submission.questionResults.filter((q) => q.isCorrect).length;
 
-  const formattedScoreDetails =
-    submission.questionResults && submission.questionResults.length > 0
-      ? submission.questionResults
-          .map((q, idx) => {
-            const isBlank = !q.studentAnswer || q.studentAnswer.trim() === '' || q.studentAnswer === '-';
-            return `Câu ${idx + 1}: ${isBlank ? '-' : `${q.earnedPoints}đ`}`;
+  const formattedScoreDetails = useMemo(() => {
+    if (submission.questionResults && submission.questionResults.length > 0) {
+      return submission.questionResults
+        .map((q, idx) => {
+          const isBlank = !q.studentAnswer || q.studentAnswer.trim() === '' || q.studentAnswer === '-';
+          const ansSnippet = isBlank ? '(Để trống)' : `"${q.studentAnswer}"`;
+          return `Câu ${idx + 1}: ${ansSnippet} (${String(q.earnedPoints).replace('.', ',')}đ)`;
+        })
+        .join(' - ');
+    }
+    if (submission.scoreString) {
+      const { items } = parseScoreStringDetailed(submission.scoreString);
+      if (items.length > 0) {
+        return items
+          .map((item) => {
+            const isBlank = !item.studentAnswer || item.studentAnswer.trim() === '' || item.studentAnswer === '-';
+            const ansSnippet = isBlank ? '(Để trống)' : `"${item.studentAnswer}"`;
+            return `Câu ${item.orderNumber}: ${ansSnippet} (${String(item.earnedPoints).replace('.', ',')}đ)`;
           })
-          .join(' - ')
-      : submission.scoreString
-      ? submission.scoreString
-          .trim()
-          .split(/\s+/)
-          .map((part, idx) => {
-            const colonIdx = part.indexOf(':');
-            const val = colonIdx !== -1 ? part.substring(colonIdx + 1) : part;
-            return `Câu ${idx + 1}: ${val === '-' ? '-' : `${val}đ`}`;
-          })
-          .join(' - ')
-      : '';
+          .join(' - ');
+      }
+    }
+    return '';
+  }, [submission]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
@@ -262,7 +268,7 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
                         <strong
                           className={result.isCorrect ? 'text-emerald-700' : 'text-rose-700'}
                         >
-                          {result.isCorrect ? 'Chính xác' : 'Chưa chính xác'}
+                          {result.isCorrect ? 'Đúng' : 'Sai'}
                         </strong>
                       </div>
                     </div>

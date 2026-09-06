@@ -1,14 +1,16 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { X, ShieldCheck, Award, Download, Loader2, CheckCircle2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import { SubmissionRecord, ExamConfig } from '../types';
+import { SubmissionRecord, ExamConfig, Question } from '../types';
 import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
+import { parseScoreStringDetailed } from '../utils/scoreStringUtils';
 
 interface PdfReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   submission: SubmissionRecord;
   config: ExamConfig;
+  questions?: Question[];
 }
 
 export const PdfReportModal: React.FC<PdfReportModalProps> = ({
@@ -16,15 +18,53 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
   onClose,
   submission,
   config,
+  questions,
 }) => {
   const reportRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
+  // Reconstruct questionResults if missing or empty
+  const questionResults = useMemo(() => {
+    if (submission.questionResults && submission.questionResults.length > 0) {
+      return submission.questionResults;
+    }
+    const { answerMap, scoreMap, items } = parseScoreStringDetailed(submission.scoreString || '');
+    if (questions && questions.length > 0) {
+      return questions.map((q, idx) => {
+        const order = q.orderNumber || idx + 1;
+        const rawAns = answerMap.has(order) ? answerMap.get(order)! : '';
+        const hasScore = scoreMap.has(order);
+        const earned = hasScore ? scoreMap.get(order)! : (submission.totalScore > 0 ? q.points : 0);
+        const isCorrect = earned > 0;
+        return {
+          questionId: q.id,
+          orderNumber: order,
+          studentAnswer: rawAns,
+          correctAnswer: q.correctAnswer,
+          isCorrect,
+          earnedPoints: earned,
+          maxPoints: q.points,
+          category: q.category || 'Kiến thức chung',
+        };
+      });
+    }
+    return items.map((it) => ({
+      questionId: it.orderNumber,
+      orderNumber: it.orderNumber,
+      studentAnswer: it.studentAnswer,
+      correctAnswer: '',
+      isCorrect: it.isCorrect,
+      earnedPoints: it.earnedPoints,
+      maxPoints: it.earnedPoints > 0 ? it.earnedPoints : 1,
+      category: 'Kiến thức chung',
+    }));
+  }, [submission, questions]);
+
   if (!isOpen) return null;
 
-  const correctCount = submission.questionResults?.filter((q) => q.isCorrect).length ?? 0;
-  const totalQuestionsCount = submission.questionResults?.length ?? 0;
+  const correctCount = questionResults.filter((q) => q.isCorrect).length;
+  const totalQuestionsCount = questionResults.length || 1;
   const percentage = Math.round((submission.totalScore / (submission.maxScore || 10)) * 100);
 
   const getGradeEvaluation = (score: number, max: number) => {
@@ -214,7 +254,7 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
             {/* Detailed Question Table */}
             <div className="mb-5">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 mb-2.5">
-                Bảng điểm chi tiết từng câu hỏi ({submission.questionResults?.length ?? 0} câu)
+                Bảng điểm chi tiết từng câu hỏi ({questionResults.length} câu)
               </h4>
               <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <table className="w-full text-xs text-left">
@@ -222,13 +262,13 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
                     <tr>
                       <th className="p-2 text-center w-12">Câu</th>
                       <th className="p-2">Phân loại</th>
-                      <th className="p-2 text-center">Bài làm HS</th>
+                      <th className="p-2 text-center min-w-[120px]">Nội dung HS đã làm</th>
                       <th className="p-2 text-center">Kết quả</th>
                       <th className="p-2 text-right">Điểm đạt</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {submission.questionResults.map((q) => {
+                    {questionResults.map((q) => {
                       const isBlank =
                         !q.studentAnswer ||
                         q.studentAnswer.trim() === '' ||
@@ -238,21 +278,25 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
                         <tr key={q.questionId} className={q.isCorrect ? 'bg-white' : 'bg-rose-50/20'}>
                           <td className="p-2 text-center font-bold text-slate-700">{q.orderNumber}</td>
                           <td className="p-2 text-slate-600">{q.category}</td>
-                          <td className="p-2 text-center font-mono font-semibold text-slate-800">
-                            {isBlank ? '-' : q.studentAnswer}
+                          <td className="p-2 text-center font-mono font-semibold">
+                            {isBlank ? (
+                              <span className="text-slate-400 font-sans italic font-normal text-[10px]">
+                                (Để trống)
+                              </span>
+                            ) : (
+                              <span className={q.isCorrect ? 'text-emerald-800 font-bold' : 'text-rose-800 font-bold'}>
+                                {q.studentAnswer}
+                              </span>
+                            )}
                           </td>
                           <td className="p-2 text-center">
                             {q.isCorrect ? (
                               <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-sans font-bold bg-emerald-100 text-emerald-800">
                                 Đúng
                               </span>
-                            ) : isBlank ? (
-                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-sans font-bold bg-amber-100 text-amber-800">
-                                Bỏ trống
-                              </span>
                             ) : (
                               <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-sans font-bold bg-rose-100 text-rose-800">
-                                Chưa đúng
+                                Sai
                               </span>
                             )}
                           </td>

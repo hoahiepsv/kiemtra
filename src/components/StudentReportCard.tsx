@@ -2,6 +2,7 @@ import React from 'react';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import { Award, CheckCircle2, XCircle, Clock, Calendar, School, User, Check, ShieldCheck } from 'lucide-react';
 import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
+import { parseScoreStringDetailed } from '../utils/scoreStringUtils';
 
 interface StudentReportCardProps {
   submission: SubmissionRecord;
@@ -21,32 +22,20 @@ export const StudentReportCard: React.FC<StudentReportCardProps> = ({
     }
 
     // Reconstruct from scoreString if questionResults is empty (e.g. from Google Sheet data2)
-    const parts = (submission.scoreString || '').trim().split(/\s+/);
-    const scoreMap = new Map<number, number>();
-    const blankSet = new Set<number>();
-    parts.forEach((p) => {
-      const [order, pts] = p.split(':');
-      if (order && pts !== undefined) {
-        const orderNum = parseInt(order, 10);
-        if (pts === '-') {
-          blankSet.add(orderNum);
-          scoreMap.set(orderNum, 0);
-        } else {
-          scoreMap.set(orderNum, parseFloat(pts) || 0);
-        }
-      }
-    });
+    const { answerMap, scoreMap } = parseScoreStringDetailed(submission.scoreString || '');
 
     return questions.map((q, idx) => {
       const order = q.orderNumber || idx + 1;
-      const isBlank = blankSet.has(order);
-      const earned = scoreMap.get(order) ?? (submission.totalScore > 0 ? q.points : 0);
+      const rawAns = answerMap.has(order) ? answerMap.get(order)! : '';
+      const hasScore = scoreMap.has(order);
+      const earned = hasScore ? scoreMap.get(order)! : (submission.totalScore > 0 ? q.points : 0);
+      const isCorrect = earned > 0;
       return {
         questionId: q.id,
         orderNumber: order,
-        studentAnswer: isBlank ? '-' : (earned > 0 ? q.correctAnswer : '-'),
+        studentAnswer: rawAns,
         correctAnswer: q.correctAnswer,
-        isCorrect: !isBlank && earned > 0,
+        isCorrect,
         earnedPoints: earned,
         maxPoints: q.points,
         category: q.category || 'Kiến thức chung',
@@ -179,47 +168,54 @@ export const StudentReportCard: React.FC<StudentReportCardProps> = ({
               <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-semibold text-[11px]">
                 <th className="py-2 px-3 text-center w-12">STT</th>
                 <th className="py-2 px-3">Phân loại câu hỏi</th>
-                <th className="py-2 px-3 text-center w-24">Đáp án chọn</th>
+                <th className="py-2 px-3 text-center min-w-[130px]">Nội dung HS đã làm</th>
                 <th className="py-2 px-3 text-center w-24">Đáp án đúng</th>
                 <th className="py-2 px-3 text-center w-20">Kết quả</th>
                 <th className="py-2 px-3 text-right w-20">Điểm đạt</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
-              {questionResults.map((q, idx) => (
-                <tr key={idx} className={q.isCorrect ? 'bg-white' : 'bg-rose-50/20'}>
-                  <td className="py-1.5 px-3 text-center font-bold text-slate-600">
-                    Câu {q.orderNumber || idx + 1}
-                  </td>
-                  <td className="py-1.5 px-3 font-sans text-slate-700 truncate max-w-[220px]">
-                    {q.category}
-                  </td>
-                  <td className="py-1.5 px-3 text-center font-bold text-slate-800">
-                    {q.studentAnswer || '-'}
-                  </td>
-                  <td className="py-1.5 px-3 text-center font-bold text-emerald-700">
-                    {q.correctAnswer}
-                  </td>
-                  <td className="py-1.5 px-3 text-center">
-                    {q.isCorrect ? (
-                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-sans font-bold bg-emerald-100 text-emerald-800">
-                        Đúng
-                      </span>
-                    ) : !q.studentAnswer || q.studentAnswer === '-' || q.studentAnswer.trim() === '' ? (
-                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-sans font-bold bg-amber-100 text-amber-800">
-                        Bỏ trống
-                      </span>
-                    ) : (
-                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-sans font-bold bg-rose-100 text-rose-800">
-                        Sai
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-1.5 px-3 text-right font-bold text-slate-800">
-                    {q.earnedPoints}đ
-                  </td>
-                </tr>
-              ))}
+              {questionResults.map((q, idx) => {
+                const isBlank = !q.studentAnswer || q.studentAnswer.trim() === '' || q.studentAnswer === '-';
+                return (
+                  <tr key={idx} className={q.isCorrect ? 'bg-white' : 'bg-rose-50/20'}>
+                    <td className="py-1.5 px-3 text-center font-bold text-slate-600">
+                      Câu {q.orderNumber || idx + 1}
+                    </td>
+                    <td className="py-1.5 px-3 font-sans text-slate-700 truncate max-w-[220px]">
+                      {q.category}
+                    </td>
+                    <td className="py-1.5 px-3 text-center font-bold">
+                      {isBlank ? (
+                        <span className="text-slate-400 font-sans font-normal italic text-[10px]">
+                          (Để trống)
+                        </span>
+                      ) : (
+                        <span className={q.isCorrect ? 'text-emerald-800' : 'text-rose-800'}>
+                          {q.studentAnswer}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-1.5 px-3 text-center font-bold text-emerald-700">
+                      {q.correctAnswer}
+                    </td>
+                    <td className="py-1.5 px-3 text-center">
+                      {q.isCorrect ? (
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-sans font-bold bg-emerald-100 text-emerald-800">
+                          Đúng
+                        </span>
+                      ) : (
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-sans font-bold bg-rose-100 text-rose-800">
+                          Sai
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-1.5 px-3 text-right font-bold text-slate-800">
+                      {q.earnedPoints}đ
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
