@@ -1,6 +1,7 @@
 import React from 'react';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import { Award, CheckCircle2, XCircle, Clock, Calendar, School, User, Check, ShieldCheck } from 'lucide-react';
+import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
 
 interface StudentReportCardProps {
   submission: SubmissionRecord;
@@ -114,13 +115,33 @@ export const StudentReportCard: React.FC<StudentReportCardProps> = ({
             </strong>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500">Thời gian làm bài:</span>
-            <span className="text-slate-700 font-mono font-medium">{submission.totalDuration || '15:00'}</span>
+            <span className="text-slate-500">Thời gian bắt đầu :</span>
+            <span className="text-slate-700 font-mono font-medium">
+              {formatExamDateTime(submission.startTime || (submission.totalDuration?.includes('T') ? submission.totalDuration : '')) || '17:02 06/09/2026'}
+            </span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500">Thời điểm nộp bài:</span>
-            <span className="text-slate-700 font-mono">{submission.endTime || '04/09/2026'}</span>
+            <span className="text-slate-500">Thời gian nộp bài :</span>
+            <span className="text-slate-700 font-mono font-medium">
+              {formatExamDateTime(submission.endTime) || '17:04 06/09/2026'}
+            </span>
           </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Thời lượng :</span>
+            <span className="text-slate-700 font-mono font-medium">
+              {formatExamDuration(submission.totalDuration, submission.startTime, submission.endTime)}
+            </span>
+          </div>
+          {submission.ipAddress && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500" title="Địa chỉ IP thiết bị làm bài của thí sinh">
+                IP của bạn :
+              </span>
+              <span className="text-sky-900 font-mono font-bold text-[11px] bg-white px-2 py-0.5 rounded border border-slate-200">
+                {submission.ipAddress}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Score Big Card */}

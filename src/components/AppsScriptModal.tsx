@@ -232,7 +232,7 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
                     Google Apps Script cho Sheet Data2 (Lưu kết quả & Bảng xếp hạng)
                   </h4>
                   <p className="text-slate-600 text-xs mt-0.5">
-                    Tự động nhận bài nộp của học sinh, ghi vào các cột: STT, TÊN HỌC SINH, LỚP, TỔNG ĐIỂM, ĐIỂM TỪNG CÂU, BẮT ĐẦU, NỘP BÀI, TỔNG THỜI GIAN.
+                    Tự động nhận bài nộp của học sinh, ghi vào các cột: STT, TÊN HỌC SINH, LỚP, TỔNG ĐIỂM, ĐIỂM TỪNG CÂU, BẮT ĐẦU, NỘP BÀI, TỔNG THỜI GIAN, IP HỌC SINH (Cột 9).
                   </p>
                 </div>
                 <button
@@ -264,7 +264,7 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
                 <h5 className="font-bold text-slate-800">Cách chèn vào Google Sheets Data2:</h5>
                 <ol className="list-decimal pl-5 space-y-1 text-slate-600">
-                  <li>Mở file Google Sheet <strong>data2</strong> để lưu kết quả. Dòng 1 ghi đúng tiêu đề các cột: STT, TÊN HỌC SINH, LỚP, TỔNG ĐIỂM, ĐIỂM TỪNG CÂU, THỜI GIAN HS BẮT ĐẦU, THỜI GIAN HS NỘP BÀI, TỔNG THỜI GIAN, IP.</li>
+                  <li>Mở file Google Sheet <strong>data2</strong> để lưu kết quả. Dòng 1 ghi đúng tiêu đề các cột: STT, TÊN HỌC SINH, LỚP, TỔNG ĐIỂM, ĐIỂM TỪNG CÂU, THỜI GIAN HS BẮT ĐẦU, THỜI GIAN HS NỘP BÀI, TỔNG THỜI GIAN, IP HỌC SINH (Cột 9).</li>
                   <li>Vào <strong>Tiện ích mở rộng</strong> &gt; <strong>Apps Script</strong>.</li>
                   <li>Dán mã trên vào, Lưu lại và Triển khai thành <strong>Ứng dụng web</strong> với quyền <strong>Bất kỳ ai (Anyone)</strong>.</li>
                   <li>Dán URL vào tab cấu hình bên dưới. Mỗi khi học sinh nộp bài, kết quả sẽ tự động nhảy vào Sheet data2 ngay tức thì!</li>

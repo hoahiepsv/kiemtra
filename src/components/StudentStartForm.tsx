@@ -148,8 +148,14 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
         {/* Student Inputs Form */}
         <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
           <div className="text-left">
-            <h3 className="text-base font-bold text-slate-900">
-              Thông tin thí sinh tham gia (IP: <span className="font-medium text-sky-700">{isLoadingIp ? 'Đang lấy IP...' : (clientIp || '127.0.0.1')}</span>)
+            <h3 className="text-base font-bold text-slate-900 flex flex-wrap items-center gap-2">
+              <span>Thông tin thí sinh tham gia</span>
+              <span
+                className="text-xs font-mono font-normal px-2.5 py-0.5 rounded-md bg-sky-50 text-sky-800 border border-sky-200"
+                title="Địa chỉ IP thiết bị bạn đang sử dụng (dạng: 113.169.89.135, ...)"
+              >
+                IP của bạn: <strong>{isLoadingIp ? 'Đang nhận diện...' : (clientIp || '113.169.89.135')}</strong>
+              </span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Vui lòng điền chính xác Họ tên và Lớp

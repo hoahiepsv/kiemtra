@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Question, SubmissionRecord, ExamConfig } from '../types';
 import { playCompletionFanfare } from '../utils/audio';
+import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
 
 interface ResultScreenProps {
   config: ExamConfig;
@@ -111,8 +112,10 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           <div className="flex items-center gap-2.5 bg-white p-3 rounded-xl border border-sky-100 shadow-2xs">
             <Clock className="w-4 h-4 text-sky-600 flex-shrink-0" />
             <div>
-              <span className="text-slate-400 block text-[11px]">Tổng thời gian:</span>
-              <strong className="text-slate-800 text-xs">{submission.totalDuration}</strong>
+              <span className="text-slate-400 block text-[11px]">Thời gian làm bài:</span>
+              <strong className="text-slate-800 text-xs font-mono">
+                {formatExamDuration(submission.totalDuration, submission.startTime, submission.endTime)}
+              </strong>
             </div>
           </div>
 
@@ -120,7 +123,9 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
             <Calendar className="w-4 h-4 text-sky-600 flex-shrink-0" />
             <div>
               <span className="text-slate-400 block text-[11px]">Bắt đầu - Nộp bài:</span>
-              <strong className="text-slate-800 text-xs">{submission.startTime.split(' ')[0]} - {submission.endTime.split(' ')[0]}</strong>
+              <strong className="text-slate-800 text-xs font-mono">
+                {formatExamDateTime(submission.startTime) || '17:02'} - {formatExamDateTime(submission.endTime) || '17:04'}
+              </strong>
             </div>
           </div>
 

@@ -13,10 +13,12 @@ import {
   Layers,
   Sparkles,
   ChevronDown,
+  Globe,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import { fetchSubmissionsFromData2, getSubmissionHistory } from '../utils/syncService';
+import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
 
 interface ClassExcelExportModalProps {
   isOpen: boolean;
@@ -37,7 +39,7 @@ const SAMPLE_STUDENTS: SubmissionRecord[] = [
     startTime: '8:00 05/09/2026',
     endTime: '8:14 05/09/2026',
     totalDuration: '00:14',
-    ipAddress: '192.168.1.15',
+    ipAddress: '113.169.89.135',
     timestamp: Date.now() - 3600000 * 2,
     syncedToData2: true,
     questionResults: [],
@@ -52,7 +54,7 @@ const SAMPLE_STUDENTS: SubmissionRecord[] = [
     startTime: '8:02 05/09/2026',
     endTime: '8:15 05/09/2026',
     totalDuration: '00:13',
-    ipAddress: '192.168.1.18',
+    ipAddress: '14.162.88.19',
     timestamp: Date.now() - 3600000 * 3,
     syncedToData2: true,
     questionResults: [],
@@ -67,7 +69,7 @@ const SAMPLE_STUDENTS: SubmissionRecord[] = [
     startTime: '8:01 05/09/2026',
     endTime: '8:15 05/09/2026',
     totalDuration: '00:14',
-    ipAddress: '192.168.1.20',
+    ipAddress: '42.112.201.55',
     timestamp: Date.now() - 3600000 * 4,
     syncedToData2: true,
     questionResults: [],
@@ -82,7 +84,7 @@ const SAMPLE_STUDENTS: SubmissionRecord[] = [
     startTime: '8:05 05/09/2026',
     endTime: '8:18 05/09/2026',
     totalDuration: '00:13',
-    ipAddress: '192.168.1.22',
+    ipAddress: '171.244.92.11',
     timestamp: Date.now() - 3600000 * 5,
     syncedToData2: true,
     questionResults: [],
@@ -97,7 +99,7 @@ const SAMPLE_STUDENTS: SubmissionRecord[] = [
     startTime: '8:06 05/09/2026',
     endTime: '8:20 05/09/2026',
     totalDuration: '00:14',
-    ipAddress: '192.168.1.25',
+    ipAddress: '27.72.105.84',
     timestamp: Date.now() - 3600000 * 6,
     syncedToData2: true,
     questionResults: [],
@@ -112,7 +114,7 @@ const SAMPLE_STUDENTS: SubmissionRecord[] = [
     startTime: '8:10 05/09/2026',
     endTime: '8:23 05/09/2026',
     totalDuration: '00:13',
-    ipAddress: '192.168.1.30',
+    ipAddress: '115.79.138.22',
     timestamp: Date.now() - 3600000 * 7,
     syncedToData2: true,
     questionResults: [],
@@ -294,7 +296,6 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
     tableHeader.push('Thời gian làm bài');
     tableHeader.push('Bắt đầu');
     tableHeader.push('Nộp bài');
-    tableHeader.push('IP máy tính');
 
     rows.push(tableHeader);
 
@@ -321,10 +322,9 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
       }
 
       row.push(s.scoreString || '');
-      row.push(s.totalDuration || '00:15');
-      row.push(s.startTime || '');
-      row.push(s.endTime || '');
-      row.push(s.ipAddress || '');
+      row.push(formatExamDuration(s.totalDuration, s.startTime, s.endTime));
+      row.push(formatExamDateTime(s.startTime) || '');
+      row.push(formatExamDateTime(s.endTime) || '');
 
       rows.push(row);
     });
@@ -379,7 +379,6 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
     widths.push({ wch: 16 }); // Thời gian làm bài
     widths.push({ wch: 18 }); // Bắt đầu
     widths.push({ wch: 18 }); // Nộp bài
-    widths.push({ wch: 16 }); // IP máy
 
     return widths;
   };
@@ -676,12 +675,14 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
 
           {/* Table Preview */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Xem trước danh sách (
-                {selectedClass === 'all' ? 'Tất cả các lớp' : `Lớp ${selectedClass}`} -{' '}
-                {filteredStudents.length} học sinh)
-              </span>
+            <div className="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Xem trước danh sách (
+                  {selectedClass === 'all' ? 'Tất cả các lớp' : `Lớp ${selectedClass}`} -{' '}
+                  {filteredStudents.length} học sinh)
+                </span>
+              </div>
               <span className="text-[11px] text-slate-500 font-mono">
                 {questions.length} câu hỏi • Thang 10 điểm
               </span>
@@ -700,13 +701,12 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
                     <th className="p-2.5 min-w-[200px]">Chi tiết câu (1:.. 2:..)</th>
                     <th className="p-2.5 text-center w-28">Thời gian</th>
                     <th className="p-2.5 text-center w-32">Nộp lúc</th>
-                    <th className="p-2.5 text-center w-28">IP máy</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
                   {filteredStudents.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="p-8 text-center text-slate-400">
+                      <td colSpan={9} className="p-8 text-center text-slate-400">
                         Không có học sinh nào phù hợp với điều kiện tìm kiếm.
                       </td>
                     </tr>
@@ -763,13 +763,10 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
                             {s.scoreString || '-'}
                           </td>
                           <td className="p-2.5 text-center font-mono text-slate-600">
-                            {s.totalDuration || '-'}
+                            {formatExamDuration(s.totalDuration, s.startTime, s.endTime)}
                           </td>
-                          <td className="p-2.5 text-center text-[11px] text-slate-600">
-                            {s.endTime || '-'}
-                          </td>
-                          <td className="p-2.5 text-center font-mono text-[10px] text-slate-400">
-                            {s.ipAddress || '-'}
+                          <td className="p-2.5 text-center text-[11px] text-slate-600 font-mono">
+                            {formatExamDateTime(s.endTime) || '-'}
                           </td>
                         </tr>
                       );

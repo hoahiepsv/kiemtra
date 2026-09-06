@@ -23,7 +23,12 @@ import {
 } from 'lucide-react';
 import { ExamConfig, Question, QuestionType } from '../types';
 import { normalizeAppsScriptUrl } from '../utils/syncService';
-import { checkEssayAnswerMatch } from '../utils/gradeService';
+import {
+  checkEssayAnswerMatch,
+  parseAcceptableAnswers,
+  joinAcceptableAnswers,
+} from '../utils/gradeService';
+import { EssayAnswerEditor } from './EssayAnswerEditor';
 
 interface ExamEditorModalProps {
   isOpen: boolean;
@@ -275,11 +280,14 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
       data1Url: normalizeAppsScriptUrl(data1Url),
     };
 
-    // Normalize orderNumbers
+    // Normalize orderNumbers and essay answer format (đáp án 1 / đáp án 2 / ...)
     const normalizedQuestions = questionList.map((q, idx) => ({
       ...q,
       orderNumber: idx + 1,
-      correctAnswer: q.type === 'Trắc nghiệm 1 đáp án' ? q.correctAnswer.trim().toUpperCase() : q.correctAnswer.trim(),
+      correctAnswer:
+        q.type === 'Trắc nghiệm 1 đáp án'
+          ? q.correctAnswer.trim().toUpperCase()
+          : joinAcceptableAnswers(parseAcceptableAnswers(q.correctAnswer)),
     }));
 
     setIsSaving(true);
@@ -778,30 +786,14 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                         </div>
                       </div>
                     ) : (
-                      /* Essay Correct Answer Input */
-                      <div className="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-2 text-xs">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-2">
-                            <Calculator className="w-4 h-4 text-indigo-700" />
-                            <label className="font-bold text-indigo-950">
-                              Đáp án đúng / Giá trị chuẩn (Số hoặc từ khóa):
-                            </label>
-                          </div>
-                          <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">
-                            Khử dấu tiếng Việt • Bỏ hoa/thường • Bỏ khoảng trắng thừa
-                          </span>
-                        </div>
-                        <input
-                          type="text"
-                          value={q.correctAnswer}
-                          onChange={(e) => handleUpdateQuestion(q.id, { correctAnswer: e.target.value })}
-                          placeholder="Ví dụ: 1000 hoặc CPU hoặc Bộ nhớ trong"
-                          className="w-full sm:w-80 px-3 py-1.5 rounded-lg border border-indigo-300 bg-white text-xs font-bold text-indigo-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <p className="text-[11px] text-indigo-800 leading-relaxed bg-white/70 p-2 rounded-lg border border-indigo-100">
-                          💡 <strong>Cơ chế tự động chấm:</strong> Khi chấm bài tự luận, hệ thống tự động so khớp giá trị học sinh nhập với từ khóa này (không phân biệt chữ hoa/thường và khoảng trắng thừa và dấu tiếng Việt). Ví dụ: nhập <em>"Bộ nhớ trong"</em>, học sinh gõ <em>"bo nho trong"</em>, <em>"BỘ NHỚ TRONG"</em>, hay <em>"  bộ  nhớ  trong  "</em> đều được tính điểm tối đa.
-                        </p>
-                      </div>
+                      /* Essay Correct Answer Input with synonyms / alternate answers */
+                      <EssayAnswerEditor
+                        questionId={q.id}
+                        value={q.correctAnswer}
+                        onChange={(newAnswerString) =>
+                          handleUpdateQuestion(q.id, { correctAnswer: newAnswerString })
+                        }
+                      />
                     )}
 
                     {/* Optional explanation */}

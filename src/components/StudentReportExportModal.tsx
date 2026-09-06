@@ -19,6 +19,7 @@ import {
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import { getSubmissionHistory } from '../utils/syncService';
 import { StudentReportCard } from './StudentReportCard';
+import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
 import { toPng } from 'html-to-image';
 import JSZip from 'jszip';
 
@@ -135,20 +136,27 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
         if (res.ok) {
           const json = await res.json();
           if (json && Array.isArray(json.data) && json.data.length > 0) {
-            loadedList = json.data.map((item: any, idx: number) => ({
-              stt: item.stt || idx + 1,
-              studentName: item.studentName || item.name || `Học sinh ${idx + 1}`,
-              className: item.className || item.class || '6A',
-              totalScore: Number(item.totalScore) || 0,
-              maxScore: 10,
-              scoreString: item.scoreString || '',
-              startTime: item.startTime || '',
-              endTime: item.endTime || '',
-              totalDuration: item.totalDuration || '',
-              timestamp: Date.now() - idx * 1000,
-              syncedToData2: true,
-              questionResults: [],
-            }));
+            loadedList = json.data.map((item: any, idx: number) => {
+              const rawStart = item.startTime || (item.totalDuration && typeof item.totalDuration === 'string' && item.totalDuration.includes('T') ? item.totalDuration : '');
+              const sTime = formatExamDateTime(rawStart);
+              const eTime = formatExamDateTime(item.endTime);
+              const dur = formatExamDuration(item.totalDuration, sTime, eTime);
+              return {
+                stt: item.stt || idx + 1,
+                studentName: item.studentName || item.name || `Học sinh ${idx + 1}`,
+                className: item.className || item.class || '6A',
+                totalScore: Number(item.totalScore) || 0,
+                maxScore: 10,
+                scoreString: item.scoreString || '',
+                startTime: sTime,
+                endTime: eTime,
+                totalDuration: dur,
+                ipAddress: item.ipAddress || '',
+                timestamp: Date.now() - idx * 1000,
+                syncedToData2: true,
+                questionResults: [],
+              };
+            });
             setLoadSource('sheet');
           }
         }
@@ -506,9 +514,10 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                             {student.className}
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-3 mt-0.5">
-                          <span>Nộp: {student.endTime || student.startTime || 'Hôm nay'}</span>
-                          <span>Thời lượng: {student.totalDuration || '15:00'}</span>
+                        <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 font-mono">
+                          <span>Bắt đầu: {formatExamDateTime(student.startTime || (student.totalDuration?.includes('T') ? student.totalDuration : '')) || '17:02'}</span>
+                          <span>Nộp: {formatExamDateTime(student.endTime) || '17:04'}</span>
+                          <span>Thời lượng: {formatExamDuration(student.totalDuration, student.startTime, student.endTime)}</span>
                         </div>
                       </div>
                     </div>

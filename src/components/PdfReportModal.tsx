@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { X, ShieldCheck, Award, Download, Loader2, CheckCircle2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { SubmissionRecord, ExamConfig } from '../types';
+import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
 
 interface PdfReportModalProps {
   isOpen: boolean;
@@ -165,16 +166,26 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
                 <strong className="text-slate-900 text-sm uppercase">{submission.className}</strong>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">Thời gian làm bài:</span>
-                <strong className="text-slate-800 text-xs">{submission.totalDuration} (Bắt đầu: {submission.startTime})</strong>
+                <span className="text-slate-400 block text-[11px]">Thời gian bắt đầu :</span>
+                <strong className="text-slate-800 text-xs font-mono">
+                  {formatExamDateTime(submission.startTime || (submission.totalDuration?.includes('T') ? submission.totalDuration : '')) || '17:02 06/09/2026'}
+                </strong>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">Thời điểm nộp bài:</span>
-                <strong className="text-slate-800 text-xs">{submission.endTime}</strong>
+                <span className="text-slate-400 block text-[11px]">Thời gian nộp bài :</span>
+                <strong className="text-slate-800 text-xs font-mono">
+                  {formatExamDateTime(submission.endTime) || '17:04 06/09/2026'}
+                </strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Thời lượng làm bài:</span>
+                <strong className="text-slate-800 text-xs font-mono">
+                  {formatExamDuration(submission.totalDuration, submission.startTime, submission.endTime)}
+                </strong>
               </div>
               {submission.ipAddress && (
-                <div className="col-span-2">
-                  <span className="text-slate-400 block text-[11px]">IP máy nộp bài:</span>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">IP của bạn:</span>
                   <strong className="text-slate-800 text-xs font-mono">{submission.ipAddress}</strong>
                 </div>
               )}

@@ -6,6 +6,7 @@ interface HeaderProps {
   config: ExamConfig;
   isOnline: boolean;
   onOpenAppsScript?: () => void;
+  onOpenAdmin?: () => void;
   onRequestPush: () => void;
   notificationsEnabled: boolean;
 }
@@ -13,6 +14,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   config,
   isOnline,
+  onOpenAdmin,
   onRequestPush,
   notificationsEnabled,
 }) => {
@@ -23,7 +25,14 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2 font-medium">
           <ShieldCheck className="w-3.5 h-3.5 text-sky-200" />
           <span>
-            Bản quyền: <strong className="text-white font-bold tracking-wide">{config.copyrightText}</strong>
+            Bản quyền:{' '}
+            <button
+              onClick={onOpenAdmin}
+              className="text-white font-bold tracking-wide hover:underline cursor-pointer focus:outline-none"
+              title="Đăng nhập Quản trị viên & Giáo viên"
+            >
+              {config.copyrightText}
+            </button>
           </span>
         </div>
 

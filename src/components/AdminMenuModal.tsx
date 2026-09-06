@@ -1,9 +1,11 @@
 import React from 'react';
-import { X, FileCode2, FileSpreadsheet, ArrowRight, ShieldCheck, FolderArchive, FileEdit } from 'lucide-react';
+import { X, FileCode2, FileSpreadsheet, ArrowRight, ShieldCheck, FolderArchive, FileEdit, Lock } from 'lucide-react';
+import { AdminAuthSession } from '../types';
 
 interface AdminMenuModalProps {
   isOpen: boolean;
   onClose: () => void;
+  session?: AdminAuthSession | null;
   onSelectAppsScript: () => void;
   onSelectExportImage: () => void;
   onSelectExportExcel: () => void;
@@ -13,12 +15,15 @@ interface AdminMenuModalProps {
 export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
   isOpen,
   onClose,
+  session,
   onSelectAppsScript,
   onSelectExportImage,
   onSelectExportExcel,
   onSelectExamEditor,
 }) => {
   if (!isOpen) return null;
+
+  const canManageAppsScript = session ? session.permissions.canManageAppsScript : true;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -32,10 +37,19 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
           >
             <X className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-sky-100 text-xs font-semibold w-fit mb-2">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
-            <span>Đã xác thực quyền Quản trị: Lê Hoà Hiệp</span>
-          </div>
+          
+          {session?.role === 'subadmin' ? (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/30 backdrop-blur-md text-emerald-100 text-xs font-semibold w-fit mb-2 border border-emerald-300/40">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-200" />
+              <span>Đã xác thực: {session.name} (Quyền tạo đề & xuất báo cáo)</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-sky-100 text-xs font-semibold w-fit mb-2 border border-white/20">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Đã xác thực quyền Cấp cao: Lê Hoà Hiệp</span>
+            </div>
+          )}
+
           <h3 className="text-xl sm:text-2xl font-bold tracking-tight">Bảng Điều Khiển Quản Trị</h3>
           <p className="text-sky-100 text-xs sm:text-sm mt-1">
             Vui lòng chọn tính năng quản trị cần thực hiện:
@@ -117,36 +131,57 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                Tổng hợp bảng điểm học sinh theo từng lớp học xuất file Microsoft Excel (*.xlsx), bao gồm điểm số, xếp loại học lực, phân tích phổ điểm và chi tiết từng câu hỏi.
+                Tổng hợp bảng điểm học sinh theo từng lớp học xuất file Microsoft Excel (*.xlsx), kèm điểm số, xếp loại học lực và phân tích từng câu hỏi.
               </p>
             </div>
           </button>
 
-          {/* Option 4: Tạo Apps Script */}
-          <button
-            onClick={() => {
-              onClose();
-              onSelectAppsScript();
-            }}
-            className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-sky-100 hover:border-sky-500 bg-sky-50/40 hover:bg-sky-50/80 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
-          >
-            <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-sky-600/20 group-hover:scale-105 transition-transform">
-              <FileCode2 className="w-6 h-6" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-sky-700 transition-colors">
-                  4. Tạo Apps Script...
-                </h4>
-                <span className="text-sky-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
-                  <ArrowRight className="w-4 h-4" />
-                </span>
+          {/* Option 4: Tạo Apps Script (Conditional) */}
+          {canManageAppsScript ? (
+            <button
+              onClick={() => {
+                onClose();
+                onSelectAppsScript();
+              }}
+              className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-sky-100 hover:border-sky-500 bg-sky-50/40 hover:bg-sky-50/80 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-sky-600/20 group-hover:scale-105 transition-transform">
+                <FileCode2 className="w-6 h-6" />
               </div>
-              <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                Cấu hình liên kết Google Sheets (data1, data2); sao chép mã Apps Script tự động đồng bộ đề thi, quản lý ngân hàng câu hỏi và tiếp nhận điểm số trực tiếp.
-              </p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-sky-700 transition-colors">
+                    4. Tạo Apps Script...
+                  </h4>
+                  <span className="text-sky-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
+                    <ArrowRight className="w-4 h-4" />
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
+                  Cấu hình liên kết Google Sheets (data1, data2); sao chép mã Apps Script tự động đồng bộ đề thi, quản lý ngân hàng câu hỏi và tiếp nhận điểm số trực tiếp.
+                </p>
+              </div>
+            </button>
+          ) : (
+            <div className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-slate-200 bg-slate-50/80 flex items-start gap-4 opacity-75 select-none cursor-not-allowed">
+              <div className="w-12 h-12 rounded-2xl bg-slate-300 text-slate-600 flex items-center justify-center flex-shrink-0">
+                <Lock className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-base font-bold text-slate-500">
+                    4. Cấu hình Google Sheets & Apps Script
+                  </h4>
+                  <span className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                    Chỉ dành cho Cấp cao
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Tài khoản Cô Phương được phân quyền: Tạo & chỉnh sửa đề thi, xuất báo cáo ảnh và xuất bảng điểm Excel. Tính năng quản trị Google Sheets được bảo vệ.
+                </p>
+              </div>
             </div>
-          </button>
+          )}
         </div>
 
         {/* Footer */}

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Lock, Eye, EyeOff, ShieldCheck, X, KeyRound, AlertCircle } from 'lucide-react';
+import { AdminAuthSession } from '../types';
 
 interface AdminAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (session: AdminAuthSession) => void;
 }
 
 export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
@@ -32,9 +33,31 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === 'Lhh249111') {
+    const cleanPass = password.trim();
+    if (cleanPass === 'Lhh249111') {
       setError('');
-      onSuccess();
+      onSuccess({
+        role: 'superadmin',
+        name: 'Thầy Lê Hoà Hiệp',
+        permissions: {
+          canEditExam: true,
+          canExportImage: true,
+          canExportExcel: true,
+          canManageAppsScript: true,
+        },
+      });
+    } else if (cleanPass === 'Phuong123456') {
+      setError('');
+      onSuccess({
+        role: 'subadmin',
+        name: 'Cô Phương',
+        permissions: {
+          canEditExam: true,
+          canExportImage: true,
+          canExportExcel: true,
+          canManageAppsScript: false,
+        },
+      });
     } else {
       setError('Mật khẩu không chính xác! Vui lòng kiểm tra lại.');
       inputRef.current?.select();
@@ -58,7 +81,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
           </div>
           <h3 className="text-xl font-bold tracking-tight">Xác thực Quyền Quản trị viên</h3>
           <p className="text-sky-100 text-xs mt-1">
-            Khu vực dành riêng cho Giáo viên & Tác giả: <strong>Lê Hoà Hiệp</strong>
+            Khu vực dành cho Quản trị viên & Giáo viên bộ môn
           </p>
         </div>
 
@@ -100,6 +123,17 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
                 <span>{error}</span>
               </div>
             )}
+          </div>
+
+          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-[11px] text-slate-500 space-y-1">
+            <p className="font-semibold text-slate-700 flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
+              <span>Chính sách phân quyền:</span>
+            </p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              <li><strong>Mật khẩu Cấp cao</strong>: Toàn quyền cấu hình, tạo đề và xuất báo cáo.</li>
+              <li><strong>Mật khẩu Giáo viên</strong>: Quyền tạo đề thi, xuất báo cáo ảnh và file Excel.</li>
+            </ul>
           </div>
 
           <div className="pt-2 flex items-center justify-end gap-3">
