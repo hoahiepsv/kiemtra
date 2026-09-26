@@ -59,6 +59,46 @@ export function saveSubmissionHistory(record: SubmissionRecord): void {
   }
 }
 
+export function clearSubmissionHistory(): void {
+  try {
+    localStorage.removeItem(SUBMISSION_HISTORY_KEY);
+  } catch (e) {
+    console.error('Error clearing history:', e);
+  }
+}
+
+export function syncSubmissionsFromSheetToHistory(sheetRecords: SubmissionRecord[]): SubmissionRecord[] {
+  try {
+    const list = Array.isArray(sheetRecords) ? [...sheetRecords] : [];
+    // Sort newest first
+    list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    // Khi đồng bộ từ datasheet Google Sheets, datasheet là nguồn dữ liệu chuẩn xác duy nhất!
+    // Ghi đè vào bộ nhớ đệm để dọn sạch các bản ghi thử nghiệm rác trên máy (như sda, wew, dsd...)
+    localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(list.slice(0, 300)));
+    return list;
+  } catch (e) {
+    console.error('Error syncing submissions from sheet to history:', e);
+    return sheetRecords || [];
+  }
+}
+
+export function deleteSubmissionFromHistory(studentName: string, className?: string, endTime?: string): SubmissionRecord[] {
+  try {
+    const existing = getSubmissionHistory();
+    const updated = existing.filter((item) => {
+      const matchName = item.studentName.toLowerCase().trim() === studentName.toLowerCase().trim();
+      const matchClass = !className || item.className.toLowerCase().trim() === className.toLowerCase().trim();
+      const matchTime = !endTime || item.endTime === endTime;
+      return !(matchName && matchClass && matchTime);
+    });
+    localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(updated));
+    return updated;
+  } catch (e) {
+    console.error('Error deleting submission from history:', e);
+    return getSubmissionHistory();
+  }
+}
+
 export function getSubmissionHistory(): SubmissionRecord[] {
   try {
     const raw = localStorage.getItem(SUBMISSION_HISTORY_KEY);

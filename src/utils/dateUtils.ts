@@ -133,3 +133,36 @@ export function formatExamDuration(
 
   return str || '15:00';
 }
+
+/**
+ * Định dạng ngày hoàn thành bài kiểm tra chuẩn văn bản tiếng Việt: "Ngày dd tháng mm năm yyyy"
+ * Ví dụ: "Ngày 04 tháng 09 năm 2026"
+ */
+export function formatVietnameseFullDate(rawDate?: string | null, timestamp?: number): string {
+  // 1. Phân tích chuỗi ngày tháng dd/mm/yyyy từ rawDate (ví dụ: "21:38 04/09/2026" hoặc "04/09/2026")
+  if (rawDate && typeof rawDate === 'string') {
+    const formatted = formatExamDateTime(rawDate);
+    const dateMatch = (formatted || rawDate).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dateMatch) {
+      const day = dateMatch[1].padStart(2, '0');
+      const month = dateMatch[2].padStart(2, '0');
+      const year = dateMatch[3];
+      return `Ngày ${day} tháng ${month} năm ${year}`;
+    }
+  }
+
+  // 2. Dùng timestamp nếu có
+  let d: Date;
+  if (timestamp && !isNaN(Number(timestamp))) {
+    d = new Date(Number(timestamp));
+  } else {
+    d = new Date();
+  }
+
+  const day = d.getDate().toString().padStart(2, '0');
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const year = d.getFullYear().toString();
+
+  return `Ngày ${day} tháng ${month} năm ${year}`;
+}
+
