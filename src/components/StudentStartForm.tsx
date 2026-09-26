@@ -69,6 +69,10 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
       setErrorMessage('Vui lòng nhập Lớp của học sinh!');
       return;
     }
+    if (!questions || questions.length === 0) {
+      setErrorMessage('Đề thi hiện chưa có câu hỏi. Giáo viên vui lòng vào mục Quản trị để đồng bộ đề thi từ Google Sheets (data1) hoặc tạo câu hỏi!');
+      return;
+    }
     setErrorMessage('');
     onStartExam(studentName.trim(), className.trim());
   };

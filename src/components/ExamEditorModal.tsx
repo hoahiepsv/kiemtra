@@ -20,6 +20,7 @@ import {
   Database,
   Loader2,
   Cloud,
+  RefreshCw,
 } from 'lucide-react';
 import { ExamConfig, Question, QuestionType } from '../types';
 import { normalizeAppsScriptUrl } from '../utils/syncService';
@@ -45,6 +46,7 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
   config,
   questions: initialQuestions,
   onSaveExam,
+  onResetToDefault,
 }) => {
   // Exam metadata state
   const [schoolName, setSchoolName] = useState(config.schoolName || '');
@@ -60,6 +62,34 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const questionListEndRef = useRef<HTMLDivElement>(null);
+
+  const handleClearAllQuestions = () => {
+    if (window.confirm('Bạn có chắc chắn muốn XÓA SẠCH toàn bộ câu hỏi trong đề thi này để tạo đề mới từ đầu?')) {
+      const blankQuestion: Question = {
+        id: Date.now(),
+        orderNumber: 1,
+        type: 'Trắc nghiệm 1 đáp án',
+        content: '',
+        optionA: '',
+        optionB: '',
+        optionC: '',
+        optionD: '',
+        correctAnswer: 'A',
+        points: 10,
+        category: 'Nhận biết',
+      };
+      setQuestionList([blankQuestion]);
+    }
+  };
+
+  const handleRestoreDefault = () => {
+    if (window.confirm('Khôi phục lại toàn bộ câu hỏi mẫu Tin học 6 (13 câu) ban đầu?')) {
+      if (onResetToDefault) {
+        onResetToDefault();
+        onClose();
+      }
+    }
+  };
 
   // Reset or initialize state whenever modal opens
   useEffect(() => {
@@ -532,9 +562,33 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                 </h4>
               </div>
 
-              <div className="flex items-center gap-2 text-xs">
-                <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 px-2.5 py-1 rounded-xl border border-amber-200 font-semibold">
-                  <span>Bước điểm chuẩn:</span>
+              <div className="flex items-center gap-2 text-xs flex-wrap">
+                {questionList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAllQuestions}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
+                    title="Xóa sạch toàn bộ câu hỏi để tạo đề mới từ đầu"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xóa sạch câu hỏi</span>
+                  </button>
+                )}
+
+                {onResetToDefault && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreDefault}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
+                    title="Khôi phục lại đề thi mẫu gốc (13 câu)"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Đề mẫu gốc</span>
+                  </button>
+                )}
+
+                <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 px-2.5 py-1.5 rounded-xl border border-amber-200 font-semibold">
+                  <span>Bước điểm:</span>
                   <strong className="font-mono font-bold text-amber-800">0,25đ</strong>
                 </span>
               </div>

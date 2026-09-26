@@ -106,7 +106,7 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
             </div>
             <div>
               <h3 className="font-extrabold text-lg tracking-tight">
-                Bộ Mã Google Apps Script & Kết Nối Datasheet
+                Bộ Mã Google Apps Script & Kết Nối Cơ sở dữ liệu
               </h3>
               <p className="text-xs text-sky-100">
                 Tạo mã chèn trực tiếp vào Google Sheets data1 (Đề thi) và data2 (Kết quả)

@@ -45,6 +45,20 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showConfirmSubmitModal, setShowConfirmSubmitModal] = useState(false);
 
+  if (!questions || questions.length === 0) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 text-center">
+        <div className="p-6 bg-white rounded-3xl shadow-lg border border-slate-200 max-w-md space-y-3">
+          <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto" />
+          <h3 className="text-lg font-bold text-slate-800">Đề thi chưa có câu hỏi</h3>
+          <p className="text-sm text-slate-600">
+            Giáo viên chưa nạp câu hỏi từ Google Sheets (data1) hoặc chưa tạo câu hỏi trong hệ thống.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const currentQuestion = questions[currentIndex] || questions[0];
   const currentAnswer = answers[currentQuestion.id] || { questionId: currentQuestion.id };
 
