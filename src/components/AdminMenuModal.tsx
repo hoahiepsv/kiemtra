@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, FileCode2, FileSpreadsheet, ArrowRight, ShieldCheck, FolderArchive, FileEdit, Lock } from 'lucide-react';
+import { X, FileCode2, FileSpreadsheet, ArrowRight, ShieldCheck, FolderArchive, FileEdit, Lock, History } from 'lucide-react';
 import { AdminAuthSession } from '../types';
 
 interface AdminMenuModalProps {
@@ -10,6 +10,7 @@ interface AdminMenuModalProps {
   onSelectExportImage: () => void;
   onSelectExportExcel: () => void;
   onSelectExamEditor: () => void;
+  onSelectHistory: () => void;
 }
 
 export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
@@ -20,6 +21,7 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
   onSelectExportImage,
   onSelectExportExcel,
   onSelectExamEditor,
+  onSelectHistory,
 }) => {
   if (!isOpen) return null;
 
@@ -136,22 +138,48 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
             </div>
           </button>
 
-          {/* Option 4: Tạo Apps Script (Conditional) */}
+          {/* Option 4: Lịch sử nộp bài (Lấy từ datasheet) */}
+          <button
+            onClick={() => {
+              onClose();
+              onSelectHistory();
+            }}
+            className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-sky-100 hover:border-sky-500 bg-sky-50/40 hover:bg-sky-50/80 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-sky-600/20 group-hover:scale-105 transition-transform">
+              <History className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-sky-700 transition-colors">
+                  4. Lịch sử nộp bài (Lấy từ datasheet)
+                </h4>
+                <span className="text-sky-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
+                  <ArrowRight className="w-4 h-4" />
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
+                Xem toàn bộ bài nộp của học sinh được tự động lấy từ datasheet (Google Sheets data2) sau khi giáo viên đăng nhập; tra cứu điểm số và xem phiếu bài thi.
+              </p>
+            </div>
+          </button>
+
+          {/* Option 5: Tạo Apps Script (Conditional) */}
           {canManageAppsScript ? (
             <button
               onClick={() => {
                 onClose();
                 onSelectAppsScript();
               }}
-              className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-sky-100 hover:border-sky-500 bg-sky-50/40 hover:bg-sky-50/80 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
+              className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-slate-100 hover:border-sky-500 bg-slate-50/50 hover:bg-sky-50/50 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
             >
-              <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-sky-600/20 group-hover:scale-105 transition-transform">
+              <div className="w-12 h-12 rounded-2xl bg-slate-700 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-slate-700/20 group-hover:scale-105 transition-transform">
                 <FileCode2 className="w-6 h-6" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-sky-700 transition-colors">
-                    4. Tạo Apps Script...
+                    5. Tạo Apps Script...
                   </h4>
                   <span className="text-sky-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
                     <ArrowRight className="w-4 h-4" />
@@ -170,7 +198,7 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="text-base font-bold text-slate-500">
-                    4. Cấu hình Google Sheets & Apps Script
+                    5. Cấu hình Google Sheets & Apps Script
                   </h4>
                   <span className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-0.5 rounded-full">
                     Chỉ dành cho Cấp cao

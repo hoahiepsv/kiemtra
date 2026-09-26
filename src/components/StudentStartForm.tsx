@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Clock, BookOpen, School, AlertCircle, Sparkles, RotateCcw, CheckCircle2, Globe } from 'lucide-react';
-import { ExamConfig, DraftExam } from '../types';
+import { ExamConfig, DraftExam, Question } from '../types';
 import { fetchClientIp } from '../utils/ipService';
 
 interface StudentStartFormProps {
   config: ExamConfig;
-  totalQuestions: number;
+  totalQuestions?: number;
+  questions?: Question[];
+  mcCount?: number;
+  essayCount?: number;
   existingDraft: DraftExam | null;
   onStartExam: (studentName: string, className: string) => void;
   onResumeDraft: () => void;
@@ -16,12 +19,27 @@ interface StudentStartFormProps {
 export const StudentStartForm: React.FC<StudentStartFormProps> = ({
   config,
   totalQuestions,
+  questions,
+  mcCount,
+  essayCount,
   existingDraft,
   onStartExam,
   onResumeDraft,
   onDiscardDraft,
   onAuthorClick,
 }) => {
+  const calculatedMcCount =
+    mcCount !== undefined
+      ? mcCount
+      : questions
+      ? questions.filter((q) => q.type === 'Trắc nghiệm 1 đáp án').length
+      : 0;
+  const calculatedEssayCount =
+    essayCount !== undefined
+      ? essayCount
+      : questions
+      ? questions.filter((q) => q.type === 'Tự luận').length
+      : 0;
   const [studentName, setStudentName] = useState(existingDraft?.studentInfo.fullName || '');
   const [className, setClassName] = useState(existingDraft?.studentInfo.className || '');
   const [errorMessage, setErrorMessage] = useState('');
@@ -131,8 +149,10 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
           <div className="flex items-center gap-2.5 bg-white p-3 rounded-xl border border-sky-100 shadow-2xs">
             <Sparkles className="w-4 h-4 text-sky-600 flex-shrink-0" />
             <div>
-              <span className="text-slate-400 block text-[11px]">Quy mô đề:</span>
-              <strong className="text-slate-800 text-xs">{totalQuestions} câu hỏi (Trắc nghiệm + Tự luận)</strong>
+              <span className="text-slate-400 block text-[11px]">Cấu trúc đề gồm:</span>
+              <strong className="text-slate-800 text-xs">
+                {calculatedMcCount} Câu trắc nghiệm + {calculatedEssayCount} Tự luận
+              </strong>
             </div>
           </div>
 

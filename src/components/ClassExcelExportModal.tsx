@@ -138,41 +138,21 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
   const loadSubmissions = async () => {
     setIsLoading(true);
     try {
-      let fetched: SubmissionRecord[] = [];
+      let finalResult: SubmissionRecord[] = [];
       if (config.data2Url && config.data2Url.trim()) {
-        fetched = await fetchSubmissionsFromData2(config.data2Url);
+        const fetched = await fetchSubmissionsFromData2(config.data2Url);
+        finalResult = fetched || [];
+      } else {
+        const localHistory = getSubmissionHistory();
+        finalResult = localHistory.length > 0 ? localHistory : [];
       }
 
-      const localHistory = getSubmissionHistory();
-
-      // Kết hợp dữ liệu (loại bỏ trùng lặp dựa trên Tên + Lớp + Thời điểm)
-      const combinedMap = new Map<string, SubmissionRecord>();
-
-      fetched.forEach((item) => {
-        const key = `${item.studentName}_${item.className}_${item.endTime}`;
-        combinedMap.set(key, item);
-      });
-
-      localHistory.forEach((item) => {
-        const key = `${item.studentName}_${item.className}_${item.endTime}`;
-        if (!combinedMap.has(key)) {
-          combinedMap.set(key, item);
-        }
-      });
-
-      let finalResult = Array.from(combinedMap.values());
-
-      // Nếu chưa có kết quả nào, bổ sung dữ liệu mẫu
-      if (finalResult.length === 0) {
-        finalResult = SAMPLE_STUDENTS;
-      }
-
-      // Đánh số thứ tự
+      // Đánh số thứ tự và sắp xếp mới nhất lên đầu
       finalResult.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
       setStudents(finalResult);
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu bài làm:', err);
-      setStudents(SAMPLE_STUDENTS);
+      setStudents([]);
     } finally {
       setIsLoading(false);
     }

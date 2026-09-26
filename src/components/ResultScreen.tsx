@@ -11,6 +11,9 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  FileText,
+  Image as ImageIcon,
+  Sparkles,
 } from 'lucide-react';
 import { Question, SubmissionRecord, ExamConfig } from '../types';
 import { playCompletionFanfare } from '../utils/audio';
@@ -160,17 +163,62 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           </div>
         </div>
 
-        {/* Action Controls: Download Result */}
-        <div className="p-4 sm:p-6 flex flex-wrap items-center justify-start gap-3 bg-white">
-          <button
-            id="btn-download-report"
-            onClick={onOpenPdfReport}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-sky-600 hover:bg-sky-700 transition-all cursor-pointer shadow-xs active:scale-95"
-          >
-            <Download className="w-4 h-4" />
-            <span>Tải kết quả kiểm tra</span>
-          </button>
+        {/* Action Controls: Download Result & Vietnamese Exam Paper */}
+        <div className="p-4 sm:p-6 flex flex-wrap items-center justify-between gap-3 bg-white border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              id="btn-download-report"
+              onClick={onOpenPdfReport}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-blue-700 hover:bg-blue-800 transition-all cursor-pointer shadow-md active:scale-95"
+            >
+              <FileText className="w-4 h-4 text-amber-300" />
+              <span>Xem & Tải ảnh bài kiểm tra (Mẫu Việt Nam)</span>
+            </button>
+
+            <button
+              onClick={onOpenPdfReport}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer border border-slate-200 active:scale-95"
+            >
+              <ImageIcon className="w-4 h-4 text-blue-600" />
+              <span>Xuất bản ảnh báo cáo (PNG)</span>
+            </button>
+          </div>
+
+          <span className="text-xs text-slate-500 italic">
+            * Mẫu giấy thi chuẩn học sinh Việt Nam với con điểm đỏ & lời phê giáo viên
+          </span>
         </div>
+      </div>
+
+      {/* Featured Banner: Vietnamese Exam Paper Preview Callout */}
+      <div className="bg-gradient-to-r from-amber-50/80 via-orange-50/50 to-sky-50/60 rounded-2xl border-2 border-dashed border-amber-300/80 p-5 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-2xs">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-400/40 flex items-center justify-center text-amber-700 flex-shrink-0 shadow-2xs">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-amber-200 text-amber-900 tracking-wider">
+                Mẫu chuẩn học sinh Việt Nam
+              </span>
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            </div>
+            <h4 className="font-extrabold text-slate-900 text-sm sm:text-base mt-1">
+              Bản báo cáo kết quả bằng hình ảnh (Mẫu giấy kiểm tra)
+            </h4>
+            <p className="text-xs text-slate-600 mt-0.5 max-w-xl leading-relaxed">
+              Biểu mẫu bài thi trang trọng với đầy đủ Quốc hiệu/Tên trường, khung <strong>Điểm số mực đỏ</strong>, <strong>Lời phê của thầy cô giáo</strong>, ma trận đáp án trắc nghiệm và chữ ký xác thực. Màu sắc lịch sự, trang nhã.
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={onOpenPdfReport}
+          className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
+        >
+          <Download className="w-4 h-4 text-amber-400" />
+          <span>Mở & Tải ảnh phiếu bài thi</span>
+        </button>
       </div>
 
       {/* Chi tiết kết quả từng câu hỏi (Không hiển thị đáp án đúng) */}

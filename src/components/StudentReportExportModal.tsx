@@ -15,9 +15,16 @@ import {
   FileSpreadsheet,
   Layers,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
-import { getSubmissionHistory } from '../utils/syncService';
+import {
+  getSubmissionHistory,
+  fetchSubmissionsFromData2,
+  syncSubmissionsFromSheetToHistory,
+  clearSubmissionHistory,
+  deleteSubmissionFromHistory,
+} from '../utils/syncService';
 import { StudentReportCard } from './StudentReportCard';
 import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
 import { toPng } from 'html-to-image';
@@ -43,6 +50,7 @@ const SAMPLE_STUDENTS: SubmissionRecord[] = [
     endTime: '8:14 04/09/2026',
     totalDuration: '00:14',
     timestamp: Date.now() - 3600000 * 2,
+    ipAddress: '113.169.89.135',
     syncedToData2: true,
     questionResults: [],
   },
@@ -57,6 +65,7 @@ const SAMPLE_STUDENTS: SubmissionRecord[] = [
     endTime: '8:15 04/09/2026',
     totalDuration: '00:13',
     timestamp: Date.now() - 3600000 * 3,
+    ipAddress: '113.169.89.142',
     syncedToData2: true,
     questionResults: [],
   },
@@ -71,6 +80,7 @@ const SAMPLE_STUDENTS: SubmissionRecord[] = [
     endTime: '8:18 04/09/2026',
     totalDuration: '00:13',
     timestamp: Date.now() - 3600000 * 4,
+    ipAddress: '113.169.89.150',
     syncedToData2: true,
     questionResults: [],
   },
@@ -85,6 +95,7 @@ const SAMPLE_STUDENTS: SubmissionRecord[] = [
     endTime: '8:24 04/09/2026',
     totalDuration: '00:14',
     timestamp: Date.now() - 3600000 * 5,
+    ipAddress: '113.169.89.168',
     syncedToData2: true,
     questionResults: [],
   },
@@ -129,61 +140,25 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
     setIsLoading(true);
     let loadedList: SubmissionRecord[] = [];
 
-    // 1. Try to fetch from Google Sheets data2 if URL is set
+    // 1. Tự động lấy trực tiếp từ datasheet (Google Sheets data2) - NGUỒN CHUẨN XÁC DUY NHẤT
     if (config.data2Url && config.data2Url.trim()) {
       try {
-        const res = await fetch(config.data2Url.trim());
-        if (res.ok) {
-          const json = await res.json();
-          if (json && Array.isArray(json.data) && json.data.length > 0) {
-            loadedList = json.data.map((item: any, idx: number) => {
-              const rawStart = item.startTime || (item.totalDuration && typeof item.totalDuration === 'string' && item.totalDuration.includes('T') ? item.totalDuration : '');
-              const sTime = formatExamDateTime(rawStart);
-              const eTime = formatExamDateTime(item.endTime);
-              const dur = formatExamDuration(item.totalDuration, sTime, eTime);
-              return {
-                stt: item.stt || idx + 1,
-                studentName: item.studentName || item.name || `Học sinh ${idx + 1}`,
-                className: item.className || item.class || '6A',
-                totalScore: Number(item.totalScore) || 0,
-                maxScore: 10,
-                scoreString: item.scoreString || '',
-                startTime: sTime,
-                endTime: eTime,
-                totalDuration: dur,
-                ipAddress: item.ipAddress || '',
-                timestamp: Date.now() - idx * 1000,
-                syncedToData2: true,
-                questionResults: [],
-              };
-            });
-            setLoadSource('sheet');
-          }
-        }
+        const sheetData = await fetchSubmissionsFromData2(config.data2Url);
+        // Datasheet là nguồn chính thống: chỉ lấy đúng các học sinh có trong datasheet.
+        // Tuyệt đối không merge các bài nộp thử nghiệm rác trên máy (sda, HIỆP, wew, dsd...).
+        loadedList = sheetData || [];
+        setLoadSource('sheet');
+        syncSubmissionsFromSheetToHistory(loadedList);
       } catch (err) {
         console.warn('Cannot fetch from Google Sheet data2:', err);
       }
-    }
-
-    // 2. If no data from sheet, merge with local storage submissions
-    const localList = getSubmissionHistory();
-    if (loadedList.length === 0 && localList.length > 0) {
-      loadedList = localList;
-      setLoadSource('local');
-    } else if (loadedList.length > 0 && localList.length > 0) {
-      // Merge unique by studentName + className
-      const existingKey = new Set(loadedList.map((s) => `${s.studentName}_${s.className}`));
-      for (const loc of localList) {
-        if (!existingKey.has(`${loc.studentName}_${loc.className}`)) {
-          loadedList.push(loc);
-        }
+    } else {
+      // Chỉ khi chưa cấu hình Google Sheets data2 mới dùng lịch sử nộp bài trên thiết bị
+      const localList = getSubmissionHistory();
+      if (localList.length > 0) {
+        loadedList = localList;
+        setLoadSource('local');
       }
-    }
-
-    // 3. If still empty, use realistic sample data so teacher can test export immediately
-    if (loadedList.length === 0) {
-      loadedList = SAMPLE_STUDENTS;
-      setLoadSource('sample');
     }
 
     setStudents(loadedList);
@@ -191,6 +166,28 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
     const allKeys = new Set(loadedList.map((s) => getStudentKey(s)));
     setSelectedIds(allKeys);
     setIsLoading(false);
+  };
+
+  const handleClearLocalHistory = () => {
+    if (
+      window.confirm(
+        'Bạn có chắc muốn xóa sạch toàn bộ bài nộp thử nghiệm trên thiết bị này (như sda, HIỆP, wew, dsd...)?\n\nDữ liệu trên Google Sheets của bạn sẽ được giữ nguyên an toàn.'
+      )
+    ) {
+      clearSubmissionHistory();
+      loadStudents();
+    }
+  };
+
+  const handleDeleteSingleStudent = (student: SubmissionRecord) => {
+    const key = getStudentKey(student);
+    setStudents((prev) => prev.filter((s) => getStudentKey(s) !== key));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+    deleteSubmissionFromHistory(student.studentName, student.className, student.endTime);
   };
 
   const getStudentKey = (s: SubmissionRecord) => `${s.stt}_${s.studentName}_${s.className}`;
@@ -390,26 +387,38 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
         {/* Source info & Search / Filter Toolbar */}
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex-shrink-0 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-slate-500 font-medium">Nguồn dữ liệu:</span>
               <span className="px-2.5 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
                 <FileSpreadsheet className="w-3 h-3" />
                 {loadSource === 'sheet'
-                  ? 'Google Sheets (data2)'
-                  : loadSource === 'local'
-                  ? 'Lịch sử nộp bài trên thiết bị'
-                  : 'Dữ liệu mẫu thử nghiệm'}
+                  ? 'Chính xác từ Google Sheets (Datasheet data2)'
+                  : 'Lịch sử nộp bài trên thiết bị'}
+              </span>
+              <span className="text-slate-500 text-[11px] font-medium">
+                ({students.length} học sinh)
               </span>
             </div>
 
-            <button
-              onClick={loadStudents}
-              disabled={isLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer transition-colors"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-sky-600' : ''}`} />
-              <span>{isLoading ? 'Đang tải...' : 'Làm mới danh sách'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleClearLocalHistory}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
+                title="Xóa các bài nộp thử nghiệm lưu trên máy này (như sda, HIỆP, wew, dsd...)"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Xóa bài nộp rác trên máy</span>
+              </button>
+
+              <button
+                onClick={loadStudents}
+                disabled={isLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer transition-colors shadow-2xs"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-emerald-600' : ''}`} />
+                <span>{isLoading ? 'Đang tải...' : 'Lấy từ Datasheet'}</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -470,9 +479,28 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
         {/* Student Table List */}
         <div className="flex-1 overflow-y-auto p-4">
           {filteredStudents.length === 0 ? (
-            <div className="text-center py-12 text-slate-400 space-y-2">
-              <Users className="w-10 h-10 mx-auto stroke-1" />
-              <p className="text-sm font-medium">Không tìm thấy học sinh nào phù hợp bộ lọc.</p>
+            <div className="text-center py-16 px-4 bg-white rounded-2xl border border-dashed border-slate-300">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+                <FileSpreadsheet className="w-6 h-6" />
+              </div>
+              <h4 className="font-bold text-slate-800 text-sm">
+                {searchKeyword || selectedClass !== 'all'
+                  ? 'Không tìm thấy học sinh nào phù hợp bộ lọc'
+                  : 'Datasheet Google Sheets chưa có bài nộp nào'}
+              </h4>
+              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+                {searchKeyword || selectedClass !== 'all'
+                  ? 'Vui lòng kiểm tra lại từ khóa tìm kiếm hoặc chọn lớp khác.'
+                  : 'Hệ thống chỉ hiển thị đúng các bài nộp thực tế từ Google Sheets datasheet (data2). Các bài nộp thử nghiệm cũ trên máy (sda, HIỆP, wew, dsd...) đã được dọn sạch để đảm bảo dữ liệu chuẩn xác.'}
+              </p>
+              <button
+                onClick={loadStudents}
+                disabled={isLoading}
+                className="mt-4 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer inline-flex items-center gap-1.5 transition-colors shadow-xs"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>{isLoading ? 'Đang tải...' : 'Lấy lại từ Datasheet'}</span>
+              </button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -549,6 +577,18 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                       >
                         <ImageIcon className="w-3.5 h-3.5" />
                         <span className="hidden sm:inline">Tải ảnh</span>
+                      </button>
+
+                      {/* Delete single student button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteSingleStudent(student);
+                        }}
+                        className="p-2 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 border border-slate-200 transition-colors cursor-pointer"
+                        title="Xóa học sinh này khỏi danh sách"
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
