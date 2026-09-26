@@ -49,6 +49,7 @@ import {
   getSubmissionHistory,
   clearSubmissionHistory,
   deleteSubmissionFromHistory,
+  clearAllExamData,
 } from './utils/syncService';
 import { checkEssayAnswerMatch } from './utils/gradeService';
 import { fetchClientIp } from './utils/ipService';
@@ -137,13 +138,13 @@ export default function App() {
       const updated = syncSubmissionsFromSheetToHistory(sheetData || []);
       setHistoryList(updated);
       if (sheetData && sheetData.length > 0) {
-        setSyncToast(`Đã lấy ${sheetData.length} bài nộp từ datasheet Google Sheets!`);
+        setSyncToast(`Đã lấy ${sheetData.length} bài nộp từ Cơ sở dữ liệu!`);
       } else {
-        setSyncToast('Datasheet Google Sheets hiện chưa có bài nộp nào.');
+        setSyncToast('Cơ sở dữ liệu hiện chưa có bài nộp nào.');
       }
       setTimeout(() => setSyncToast(null), 3500);
     } catch (e) {
-      console.warn('Lỗi lấy bài nộp từ datasheet:', e);
+      console.warn('Lỗi lấy bài nộp từ Cơ sở dữ liệu:', e);
     } finally {
       setIsSyncingHistory(false);
     }
@@ -154,20 +155,20 @@ export default function App() {
     setShowAdminAuthModal(false);
     setShowAdminMenuModal(true);
 
-    // Tự động tải và đồng bộ lịch sử nộp bài từ datasheet (Google Sheets data2) sau khi giáo viên đăng nhập
+    // Tự động tải và đồng bộ lịch sử nộp bài từ Cơ sở dữ liệu sau khi giáo viên đăng nhập
     if (config.data2Url && config.data2Url.trim()) {
       try {
         const sheetData = await fetchSubmissionsFromData2(config.data2Url);
         const updated = syncSubmissionsFromSheetToHistory(sheetData || []);
         setHistoryList(updated);
         if (sheetData && sheetData.length > 0) {
-          setSyncToast(`Đã đồng bộ ${sheetData.length} bài nộp từ datasheet!`);
+          setSyncToast(`Đã đồng bộ ${sheetData.length} bài nộp từ Cơ sở dữ liệu!`);
         } else {
-          setSyncToast('Đã kết nối datasheet (Chưa có bài nộp nào trong bảng).');
+          setSyncToast('Đã kết nối Cơ sở dữ liệu (Chưa có bài nộp nào trong bảng).');
         }
         setTimeout(() => setSyncToast(null), 3500);
       } catch (e) {
-        console.warn('Lỗi đồng bộ bài nộp từ datasheet:', e);
+        console.warn('Lỗi đồng bộ bài nộp từ Cơ sở dữ liệu:', e);
       }
     }
   };
@@ -622,6 +623,19 @@ export default function App() {
     }, 4500);
   };
 
+  // Clear all exam data on device
+  const handleClearAllExamData = () => {
+    clearAllExamData();
+    setHistoryList([]);
+    setExistingDraft(null);
+    setAnswers({});
+    setActiveSubmission(null);
+    setSyncToast('🗑️ Đã xóa sạch toàn bộ examdata trên thiết bị!');
+    setTimeout(() => {
+      setSyncToast(null);
+    }, 4500);
+  };
+
   // Restart / Retake Exam
   const handleRestart = () => {
     setScreen('start');
@@ -745,6 +759,7 @@ export default function App() {
         onSelectExportExcel={() => setShowClassExcelModal(true)}
         onSelectExamEditor={() => setShowExamEditorModal(true)}
         onSelectHistory={() => setShowHistoryModal(true)}
+        onClearAllExamData={handleClearAllExamData}
       />
 
       {/* MODAL 1: Apps Script Generator & Config */}
@@ -764,7 +779,7 @@ export default function App() {
         questions={questions}
       />
 
-      {/* MODAL 1.7: Student Submission History (Synced from Datasheet) */}
+      {/* MODAL 1.7: Student Submission History (Synced from Cơ sở dữ liệu) */}
       <HistoryModal
         isOpen={showHistoryModal}
         onClose={() => setShowHistoryModal(false)}
@@ -776,7 +791,7 @@ export default function App() {
           setShowPdfModal(true);
         }}
         onClearHistory={() => {
-          if (window.confirm('Bạn có chắc muốn xóa bộ nhớ đệm lịch sử bài nộp trên trình duyệt này? (Dữ liệu trên Google Sheets data2 vẫn còn nguyên vẹn)')) {
+          if (window.confirm('Bạn có chắc muốn xóa bộ nhớ đệm lịch sử bài nộp trên trình duyệt này? (Dữ liệu trên Cơ sở dữ liệu vẫn còn nguyên vẹn)')) {
             clearSubmissionHistory();
             setHistoryList([]);
           }
