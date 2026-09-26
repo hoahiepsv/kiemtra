@@ -67,12 +67,32 @@ export function clearSubmissionHistory(): void {
   }
 }
 
+/**
+ * Xóa sạch toàn bộ dữ liệu bài thi (examdata) trên thiết bị:
+ * - Lịch sử nộp bài (submission history)
+ * - Bài làm nháp (draft exam)
+ * - Hàng đợi chưa đồng bộ (unsynced submissions)
+ * - Bộ nhớ tạm câu hỏi (questions cache)
+ */
+export function clearAllExamData(): void {
+  try {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    localStorage.removeItem(SUBMISSION_HISTORY_KEY);
+    localStorage.removeItem(UNSYNCED_STORAGE_KEY);
+    localStorage.removeItem('kiem_tra_thuong_xuyen_questions');
+    localStorage.removeItem('kiem_tra_thuong_xuyen_draft');
+    localStorage.removeItem('exam_student_client_ip');
+  } catch (e) {
+    console.error('Error clearing all exam data:', e);
+  }
+}
+
 export function syncSubmissionsFromSheetToHistory(sheetRecords: SubmissionRecord[]): SubmissionRecord[] {
   try {
     const list = Array.isArray(sheetRecords) ? [...sheetRecords] : [];
     // Sort newest first
     list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    // Khi đồng bộ từ datasheet Google Sheets, datasheet là nguồn dữ liệu chuẩn xác duy nhất!
+    // Khi đồng bộ từ Cơ sở dữ liệu, Cơ sở dữ liệu là nguồn dữ liệu chuẩn xác duy nhất!
     // Ghi đè vào bộ nhớ đệm để dọn sạch các bản ghi thử nghiệm rác trên máy (như sda, wew, dsd...)
     localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(list.slice(0, 300)));
     return list;

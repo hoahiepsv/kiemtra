@@ -1,5 +1,5 @@
 /**
- * Bộ mã nguồn Google Apps Script chuẩn cho 2 Datasheet data1 và data2
+ * Bộ mã nguồn Google Apps Script chuẩn cho Cơ sở dữ liệu data1 và data2
  * Tác giả & Bản quyền: Lê Hoà Hiệp - 0983.676.470
  */
 
