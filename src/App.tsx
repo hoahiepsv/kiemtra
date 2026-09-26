@@ -18,6 +18,7 @@ import { AdminMenuModal } from './components/AdminMenuModal';
 import { StudentReportExportModal } from './components/StudentReportExportModal';
 import { ClassExcelExportModal } from './components/ClassExcelExportModal';
 import { ExamEditorModal } from './components/ExamEditorModal';
+import { HistoryModal } from './components/HistoryModal';
 import {
   DEFAULT_EXAM_CONFIG,
   DEFAULT_QUESTIONS,
@@ -43,6 +44,11 @@ import {
   fetchQuestionsFromData1,
   saveExamToData1,
   normalizeAppsScriptUrl,
+  fetchSubmissionsFromData2,
+  syncSubmissionsFromSheetToHistory,
+  getSubmissionHistory,
+  clearSubmissionHistory,
+  deleteSubmissionFromHistory,
 } from './utils/syncService';
 import { checkEssayAnswerMatch } from './utils/gradeService';
 import { fetchClientIp } from './utils/ipService';
@@ -114,15 +120,56 @@ export default function App() {
   const [showStudentReportExportModal, setShowStudentReportExportModal] = useState(false);
   const [showClassExcelModal, setShowClassExcelModal] = useState(false);
   const [showExamEditorModal, setShowExamEditorModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyList, setHistoryList] = useState<SubmissionRecord[]>(() => getSubmissionHistory());
+  const [isSyncingHistory, setIsSyncingHistory] = useState(false);
+  const [previewSubmission, setPreviewSubmission] = useState<SubmissionRecord | null>(null);
 
   const handleAuthorClick = () => {
     setShowAdminAuthModal(true);
   };
 
-  const handleAdminAuthSuccess = (session: AdminAuthSession) => {
+  const handleSyncHistoryFromSheet = async () => {
+    if (!config.data2Url || !config.data2Url.trim()) return;
+    setIsSyncingHistory(true);
+    try {
+      const sheetData = await fetchSubmissionsFromData2(config.data2Url);
+      const updated = syncSubmissionsFromSheetToHistory(sheetData || []);
+      setHistoryList(updated);
+      if (sheetData && sheetData.length > 0) {
+        setSyncToast(`Đã lấy ${sheetData.length} bài nộp từ datasheet Google Sheets!`);
+      } else {
+        setSyncToast('Datasheet Google Sheets hiện chưa có bài nộp nào.');
+      }
+      setTimeout(() => setSyncToast(null), 3500);
+    } catch (e) {
+      console.warn('Lỗi lấy bài nộp từ datasheet:', e);
+    } finally {
+      setIsSyncingHistory(false);
+    }
+  };
+
+  const handleAdminAuthSuccess = async (session: AdminAuthSession) => {
     setAdminSession(session);
     setShowAdminAuthModal(false);
     setShowAdminMenuModal(true);
+
+    // Tự động tải và đồng bộ lịch sử nộp bài từ datasheet (Google Sheets data2) sau khi giáo viên đăng nhập
+    if (config.data2Url && config.data2Url.trim()) {
+      try {
+        const sheetData = await fetchSubmissionsFromData2(config.data2Url);
+        const updated = syncSubmissionsFromSheetToHistory(sheetData || []);
+        setHistoryList(updated);
+        if (sheetData && sheetData.length > 0) {
+          setSyncToast(`Đã đồng bộ ${sheetData.length} bài nộp từ datasheet!`);
+        } else {
+          setSyncToast('Đã kết nối datasheet (Chưa có bài nộp nào trong bảng).');
+        }
+        setTimeout(() => setSyncToast(null), 3500);
+      } catch (e) {
+        console.warn('Lỗi đồng bộ bài nộp từ datasheet:', e);
+      }
+    }
   };
 
   // Online / Offline state
@@ -622,6 +669,7 @@ export default function App() {
         {screen === 'start' && (
           <StudentStartForm
             config={config}
+            questions={questions}
             totalQuestions={questions.length}
             existingDraft={existingDraft}
             onStartExam={handleStartExam}
@@ -683,7 +731,7 @@ export default function App() {
         onSuccess={handleAdminAuthSuccess}
       />
 
-      {/* MODAL 0.1: Admin Menu (1. Tạo apps script.., 2. Xuất báo cáo dạng file ảnh, 3. Xuất kết quả theo lớp *.xlsx, 4. Tạo & chỉnh sửa đề thi) */}
+      {/* MODAL 0.1: Admin Menu */}
       <AdminMenuModal
         isOpen={showAdminMenuModal}
         onClose={() => setShowAdminMenuModal(false)}
@@ -696,6 +744,7 @@ export default function App() {
         onSelectExportImage={() => setShowStudentReportExportModal(true)}
         onSelectExportExcel={() => setShowClassExcelModal(true)}
         onSelectExamEditor={() => setShowExamEditorModal(true)}
+        onSelectHistory={() => setShowHistoryModal(true)}
       />
 
       {/* MODAL 1: Apps Script Generator & Config */}
@@ -713,6 +762,29 @@ export default function App() {
         onClose={() => setShowStudentReportExportModal(false)}
         config={config}
         questions={questions}
+      />
+
+      {/* MODAL 1.7: Student Submission History (Synced from Datasheet) */}
+      <HistoryModal
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        history={historyList}
+        isSyncing={isSyncingHistory}
+        onRefreshFromSheet={handleSyncHistoryFromSheet}
+        onSelectSubmission={(sub) => {
+          setPreviewSubmission(sub);
+          setShowPdfModal(true);
+        }}
+        onClearHistory={() => {
+          if (window.confirm('Bạn có chắc muốn xóa bộ nhớ đệm lịch sử bài nộp trên trình duyệt này? (Dữ liệu trên Google Sheets data2 vẫn còn nguyên vẹn)')) {
+            clearSubmissionHistory();
+            setHistoryList([]);
+          }
+        }}
+        onDeleteSubmission={(sub) => {
+          const updated = deleteSubmissionFromHistory(sub.studentName, sub.className, sub.endTime);
+          setHistoryList(updated);
+        }}
       />
 
       {/* MODAL 1.8: Class Excel Export (*.xlsx) */}
@@ -733,12 +805,15 @@ export default function App() {
         onResetToDefault={handleResetExamToDefault}
       />
 
-      {/* MODAL 2: PDF Print & Report (Không có đáp án) */}
-      {activeSubmission && (
+      {/* MODAL 2: PDF Print & Report (Mẫu bài kiểm tra học sinh Việt Nam) */}
+      {(previewSubmission || activeSubmission) && (
         <PdfReportModal
           isOpen={showPdfModal}
-          onClose={() => setShowPdfModal(false)}
-          submission={activeSubmission}
+          onClose={() => {
+            setShowPdfModal(false);
+            setPreviewSubmission(null);
+          }}
+          submission={previewSubmission || activeSubmission!}
           config={config}
           questions={questions}
         />
