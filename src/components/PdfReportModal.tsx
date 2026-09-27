@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { X, Download, Loader2, CheckCircle2, Printer, Palette, Eye, FileText } from 'lucide-react';
+import { X, Download, Loader2, CheckCircle2, Printer, Palette, FileText } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import { VietnameseExamPaper, ExamPaperTheme } from './VietnameseExamPaper';
@@ -23,7 +23,6 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<ExamPaperTheme>('navy');
-  const [showCorrectAnswers, setShowCorrectAnswers] = useState(false);
 
   if (!isOpen) return null;
 
@@ -177,23 +176,11 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
 
         {/* Scrollable Container with centered Vietnamese Exam Paper */}
         <div className="p-3 sm:p-6 overflow-y-auto flex-1 bg-slate-200/70 flex flex-col items-center print:p-0 print:bg-white print:overflow-visible">
-          {/* Sub Toolbar: Option to show/hide correct answers */}
+          {/* Sub Toolbar */}
           <div className="w-full max-w-[820px] flex items-center justify-between pb-3 text-xs text-slate-600 print:hidden">
             <span className="font-serif italic text-slate-500 text-[11px]">
               Giao diện trang giấy thi học sinh • Con điểm đỏ và lời phê của giáo viên
             </span>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none text-slate-700 font-medium hover:text-slate-900">
-              <input
-                type="checkbox"
-                checked={showCorrectAnswers}
-                onChange={(e) => setShowCorrectAnswers(e.target.checked)}
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 cursor-pointer"
-              />
-              <span className="flex items-center gap-1">
-                <Eye className="w-3.5 h-3.5 text-slate-400" />
-                Hiển thị cột đáp án chuẩn
-              </span>
-            </label>
           </div>
 
           {/* Capturable Vietnamese Exam Paper */}
@@ -206,7 +193,7 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
               config={config}
               questions={questions}
               theme={selectedTheme}
-              showCorrectAnswers={showCorrectAnswers}
+              showCorrectAnswers={false}
             />
           </div>
         </div>

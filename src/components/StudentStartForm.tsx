@@ -116,61 +116,64 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
 
       {/* Main Start Card */}
       <div className="bg-white rounded-2xl border border-sky-100 shadow-sm overflow-hidden">
-        {/* Card Header with Soft Light Blue Gradient */}
-        <div className="bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 px-6 py-6 text-white text-center sm:text-left relative">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 text-white text-xs font-semibold backdrop-blur-xs mb-2">
-                <School className="w-3.5 h-3.5" />
-                <span>{config.schoolName}</span>
+        {/* Card Header with Soft Gradient - Thu gọn theo yêu cầu */}
+        <div className="bg-gradient-to-r from-sky-600 via-sky-700 to-blue-700 px-3.5 py-2.5 sm:px-5 sm:py-3 text-white">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 text-sky-100 text-[10px] sm:text-xs font-semibold mb-0.5">
+                <School className="w-3.5 h-3.5 flex-shrink-0 text-sky-200" />
+                <span className="truncate">{config.schoolName}</span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+              <h2 className="text-sm sm:text-lg font-black tracking-tight text-white uppercase truncate">
                 {config.examName}
               </h2>
             </div>
 
-            <div className="bg-white/15 backdrop-blur-md rounded-xl p-3 border border-white/20 text-center flex-shrink-0 self-center sm:self-auto">
-              <span className="text-[11px] uppercase tracking-wider text-sky-200 block font-medium">
-                Thời gian làm bài
-              </span>
-              <span className="text-2xl font-black text-white block">
-                {config.durationMinutes} <span className="text-sm font-normal">phút</span>
-              </span>
+            <div className="bg-white/15 backdrop-blur-md rounded-xl px-2.5 py-1 sm:px-3 sm:py-1.5 border border-white/20 text-right flex-shrink-0 flex items-center gap-1.5 sm:gap-2">
+              <Clock className="w-3.5 h-3.5 text-sky-200 flex-shrink-0" />
+              <div>
+                <span className="text-[9px] uppercase tracking-wider text-sky-100 block font-medium leading-none">
+                  Thời gian
+                </span>
+                <span className="text-xs sm:text-sm font-black text-white font-mono leading-tight">
+                  {config.durationMinutes} phút
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Exam Information Chips */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 sm:p-6 bg-sky-50/50 border-b border-sky-100 text-xs">
-          <div className="flex items-center gap-2.5 bg-white p-3 rounded-xl border border-sky-100 shadow-2xs">
-            <BookOpen className="w-4 h-4 text-sky-600 flex-shrink-0" />
-            <div>
-              <span className="text-slate-400 block text-[11px]">Môn học:</span>
-              <strong className="text-slate-800 text-xs">{config.subject}</strong>
+        {/* Exam Information Chips - Thu gọn gọn gàng */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 sm:p-4 bg-sky-50/50 border-b border-sky-100 text-xs">
+          <div className="flex items-center gap-2 bg-white px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-sky-100 shadow-2xs">
+            <BookOpen className="w-3.5 h-3.5 text-sky-600 flex-shrink-0" />
+            <div className="min-w-0">
+              <span className="text-slate-400 block text-[10px]">Môn học:</span>
+              <strong className="text-slate-800 text-xs truncate block">{config.subject}</strong>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 bg-white p-3 rounded-xl border border-sky-100 shadow-2xs">
-            <Sparkles className="w-4 h-4 text-sky-600 flex-shrink-0" />
-            <div>
-              <span className="text-slate-400 block text-[11px]">Cấu trúc đề gồm:</span>
-              <strong className="text-slate-800 text-xs">
-                {calculatedMcCount} Câu trắc nghiệm + {calculatedEssayCount} Tự luận
+          <div className="flex items-center gap-2 bg-white px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-sky-100 shadow-2xs">
+            <Sparkles className="w-3.5 h-3.5 text-sky-600 flex-shrink-0" />
+            <div className="min-w-0">
+              <span className="text-slate-400 block text-[10px]">Cấu trúc:</span>
+              <strong className="text-slate-800 text-xs truncate block">
+                {calculatedMcCount} Trắc nghiệm + {calculatedEssayCount} Tự luận
               </strong>
             </div>
           </div>
 
-          <div className="col-span-2 sm:col-span-1 flex items-center gap-2.5 bg-white p-3 rounded-xl border border-sky-100 shadow-2xs">
-            <Clock className="w-4 h-4 text-sky-600 flex-shrink-0" />
-            <div>
-              <span className="text-slate-400 block text-[11px]">Hình thức:</span>
-              <strong className="text-slate-800 text-xs">Tự động tính giờ & Lưu điểm</strong>
+          <div className="col-span-2 sm:col-span-1 flex items-center gap-2 bg-white px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-sky-100 shadow-2xs">
+            <Clock className="w-3.5 h-3.5 text-sky-600 flex-shrink-0" />
+            <div className="min-w-0">
+              <span className="text-slate-400 block text-[10px]">Hình thức:</span>
+              <strong className="text-slate-800 text-xs truncate block">Tự động tính giờ & Lưu điểm</strong>
             </div>
           </div>
         </div>
 
         {/* Student Inputs Form */}
-        <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-8 space-y-4 sm:space-y-6">
           <div className="text-left">
             <h3 className="text-base font-bold text-slate-900 flex flex-wrap items-center gap-2">
               <span>Thông tin thí sinh tham gia</span>

@@ -109,24 +109,24 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   const isLastQuestion = currentIndex === questions.length - 1;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-4 sm:py-6">
+    <div className="max-w-6xl mx-auto px-2 sm:px-4 py-2 sm:py-6">
       {/* Top Floating Control Bar */}
-      <div className="bg-white rounded-2xl border border-sky-100 shadow-sm p-4 mb-6 sticky top-16 z-30">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white rounded-xl sm:rounded-2xl border border-sky-100 shadow-sm p-2 sm:p-4 mb-3 sm:mb-6 sticky top-12 sm:top-16 z-30">
+        <div className="flex items-center justify-between gap-1.5 sm:gap-3 flex-wrap">
           {/* Student details */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-sm">
-              {className}
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            <div className="px-2 py-1 rounded-lg bg-sky-100 text-sky-800 font-extrabold text-xs">
+              Lớp {className}
             </div>
-            <div>
-              <span className="text-[11px] text-slate-400 block font-medium">Thí sinh:</span>
-              <strong className="text-slate-800 text-sm">{studentName}</strong>
+            <div className="min-w-0">
+              <span className="text-[10px] text-slate-400 hidden sm:block font-medium">Thí sinh:</span>
+              <strong className="text-slate-800 text-xs sm:text-sm truncate max-w-[110px] xs:max-w-[150px] sm:max-w-none block">{studentName}</strong>
             </div>
           </div>
 
           {/* Timer with dynamic warning colors */}
           <div
-            className={`flex items-center gap-2.5 px-4 py-2 rounded-xl border transition-all ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl border transition-all ${
               remainingSeconds <= 120
                 ? 'bg-rose-50 border-rose-300 text-rose-700 animate-pulse'
                 : remainingSeconds <= 300
@@ -134,17 +134,17 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 : 'bg-sky-50 border-sky-200 text-sky-800'
             }`}
           >
-            <Clock className={`w-5 h-5 ${remainingSeconds <= 120 ? 'text-rose-600' : 'text-sky-600'}`} />
+            <Clock className={`w-3.5 h-3.5 sm:w-5 sm:h-5 ${remainingSeconds <= 120 ? 'text-rose-600' : 'text-sky-600'}`} />
             <div>
-              <span className="text-[10px] uppercase font-bold tracking-wider block opacity-75">
+              <span className="text-[9px] uppercase font-bold tracking-wider hidden sm:block opacity-75">
                 Thời gian còn lại
               </span>
-              <span className="text-lg font-black tracking-tight font-mono">{timeFormatted}</span>
+              <span className="text-sm sm:text-lg font-black tracking-tight font-mono leading-none">{timeFormatted}</span>
             </div>
           </div>
 
-          {/* Quick Actions: Review & Save Draft */}
-          <div className="flex items-center gap-2">
+          {/* Quick Actions: Review & Save Draft & Submit */}
+          <div className="flex items-center gap-1 sm:gap-2">
             {/* Auto-save status */}
             <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
               <Save className="w-3.5 h-3.5 text-emerald-600" />
@@ -154,26 +154,27 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             <button
               onClick={onSaveDraftManual}
               title="Nhấn để lưu nháp ngay lập tức"
-              className="p-2 rounded-lg text-slate-600 hover:text-sky-600 hover:bg-sky-50 transition-colors border border-slate-200 md:hidden cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-600 hover:text-sky-600 hover:bg-sky-50 transition-colors border border-slate-200 md:hidden cursor-pointer"
             >
-              <Save className="w-4 h-4" />
+              <Save className="w-3.5 h-3.5" />
             </button>
 
             {/* Persistent NÚT XEM LẠI as requested in prompt */}
             <button
               id="btn-review-questions"
               onClick={() => setShowReviewModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition-all cursor-pointer shadow-2xs"
+              className="flex items-center gap-1 px-2 py-1 sm:px-3.5 sm:py-2 rounded-lg sm:rounded-xl text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition-all cursor-pointer shadow-2xs"
             >
-              <Eye className="w-4 h-4" />
-              <span>Nút xem lại ({answeredCount}/{questions.length})</span>
+              <Eye className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Nút xem lại</span>
+              <span>({answeredCount}/{questions.length})</span>
             </button>
 
             {/* Direct Submit Button */}
             <button
               id="btn-submit-header"
               onClick={() => setShowConfirmSubmitModal(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 shadow-xs cursor-pointer active:scale-95"
+              className="flex items-center gap-1 px-2.5 py-1 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 shadow-xs cursor-pointer active:scale-95"
             >
               <Send className="w-3.5 h-3.5" />
               <span>Nộp bài</span>
@@ -182,7 +183,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         </div>
 
         {/* Progress bar */}
-        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-3">
+        <div className="w-full bg-slate-100 h-1 sm:h-1.5 rounded-full overflow-hidden mt-1.5 sm:mt-3">
           <div
             className={`h-full transition-all duration-1000 ${
               remainingSeconds <= 120 ? 'bg-rose-500' : 'bg-sky-500'
@@ -192,48 +193,48 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3.5 sm:gap-6">
         {/* Main Question Panel (3 cols on desktop) */}
-        <div className="lg:col-span-3 space-y-6">
-          <div className="bg-white rounded-2xl border border-sky-100 shadow-sm p-6 sm:p-8">
+        <div className="lg:col-span-3 space-y-4 sm:space-y-6">
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-sky-100 shadow-sm p-3.5 sm:p-8">
             {/* Question metadata badge */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-6 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-lg text-xs font-extrabold uppercase tracking-wide bg-sky-100 text-sky-800">
+            <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 pb-2.5 mb-3.5 sm:pb-4 sm:mb-6 border-b border-slate-100">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg text-[11px] sm:text-xs font-extrabold uppercase tracking-wide bg-sky-100 text-sky-800">
                   Câu {currentIndex + 1} / {questions.length}
                 </span>
-                <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-700">
+                <span className="px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg text-[11px] sm:text-xs font-medium bg-slate-100 text-slate-700">
                   {currentQuestion.type}
                 </span>
-                <span className="px-2.5 py-1 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200">
-                  {currentQuestion.points} điểm
+                <span className="px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg text-[11px] sm:text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200">
+                  {currentQuestion.points}đ
                 </span>
               </div>
 
               {/* Bookmark / Flag for review button */}
               <button
                 onClick={handleToggleFlag}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
                   currentAnswer.isFlagged
                     ? 'bg-amber-100 text-amber-800 border border-amber-300'
                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
                 }`}
               >
-                <Bookmark className={`w-3.5 h-3.5 ${currentAnswer.isFlagged ? 'fill-amber-500 text-amber-500' : ''}`} />
-                <span>{currentAnswer.isFlagged ? 'Đã đánh dấu xem lại' : 'Đánh dấu câu này'}</span>
+                <Bookmark className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${currentAnswer.isFlagged ? 'fill-amber-500 text-amber-500' : ''}`} />
+                <span className="hidden xs:inline">{currentAnswer.isFlagged ? 'Đã đánh dấu xem lại' : 'Đánh dấu câu này'}</span>
               </button>
             </div>
 
             {/* Question Content */}
-            <div className="mb-8">
-              <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-relaxed">
+            <div className="mb-4 sm:mb-8">
+              <h3 className="text-sm sm:text-lg font-bold text-slate-900 leading-snug sm:leading-relaxed">
                 {currentQuestion.content}
               </h3>
             </div>
 
             {/* Answer Options */}
             {currentQuestion.type === 'Trắc nghiệm 1 đáp án' ? (
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {[
                   { key: 'A', text: currentQuestion.optionA },
                   { key: 'B', text: currentQuestion.optionB },
@@ -246,14 +247,14 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                     <button
                       key={key}
                       onClick={() => handleSelectOption(key)}
-                      className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-start gap-3.5 cursor-pointer ${
+                      className={`w-full text-left p-2.5 sm:p-4 rounded-xl border-2 transition-all flex items-start gap-2.5 sm:gap-3.5 cursor-pointer text-xs sm:text-sm ${
                         isSelected
                           ? 'bg-sky-50/90 border-sky-500 shadow-sm shadow-sky-100 ring-2 ring-sky-200'
                           : 'bg-white border-slate-200 hover:border-sky-300 hover:bg-slate-50/60'
                       }`}
                     >
                       <span
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0 transition-colors ${
+                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center font-bold text-xs sm:text-sm flex-shrink-0 transition-colors ${
                           isSelected
                             ? 'bg-sky-600 text-white shadow-xs'
                             : 'bg-slate-100 text-slate-700'
@@ -261,7 +262,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                       >
                         {key}
                       </span>
-                      <span className="text-sm font-medium text-slate-800 pt-1 leading-relaxed">
+                      <span className="text-xs sm:text-sm font-medium text-slate-800 pt-0.5 sm:pt-1 leading-snug sm:leading-relaxed">
                         {text || `Đáp án ${key}`}
                       </span>
                       {isSelected && (

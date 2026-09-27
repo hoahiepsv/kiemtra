@@ -1,13 +1,14 @@
-import React from 'react';
-import { History, X, Trash2, Calendar, Clock, Eye, RefreshCw, FileSpreadsheet, FileText, CheckCircle2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { History, X, Trash2, Calendar, Clock, Eye, RefreshCw, FileSpreadsheet, FileText, CheckCircle2, Search } from 'lucide-react';
 import { SubmissionRecord } from '../types';
+import { matchSearchQuery } from '../utils/gradeService';
 
 interface HistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   history: SubmissionRecord[];
   onSelectSubmission: (submission: SubmissionRecord) => void;
-  onClearHistory: () => void;
+  onClearHistory?: () => void;
   onDeleteSubmission?: (submission: SubmissionRecord) => void;
   onRefreshFromSheet?: () => Promise<void>;
   isSyncing?: boolean;
@@ -23,6 +24,17 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   onRefreshFromSheet,
   isSyncing = false,
 }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredHistory = useMemo(() => {
+    if (!searchTerm.trim()) return history;
+    return history.filter(
+      (record) =>
+        matchSearchQuery(record.studentName, searchTerm) ||
+        matchSearchQuery(record.className, searchTerm)
+    );
+  }, [history, searchTerm]);
+
   if (!isOpen) return null;
 
   return (
@@ -71,7 +83,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
           </div>
         </div>
 
-        {/* Sub-bar info */}
+        {/* Sub-bar info & Search */}
         <div className="bg-slate-50 px-6 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between text-xs text-slate-600 gap-2 flex-shrink-0">
           <div className="flex items-center gap-2">
             <span>Tổng số bài nộp: <strong className="text-slate-900">{history.length}</strong> bài</span>
@@ -82,9 +94,18 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
               </span>
             )}
           </div>
-          <span className="text-[11px] text-slate-500 italic">
-            * Nhấn &quot;Xem phiếu bài thi&quot; để mở bản báo cáo chuẩn giấy thi học sinh Việt Nam
-          </span>
+          {history.length > 0 && (
+            <div className="relative min-w-[200px] sm:min-w-[240px]">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Tìm tên học sinh, lớp..."
+                className="w-full pl-8 pr-3 py-1 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500 shadow-2xs"
+              />
+            </div>
+          )}
         </div>
 
         {/* Body list */}
@@ -109,8 +130,14 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                 </button>
               )}
             </div>
+          ) : filteredHistory.length === 0 ? (
+            <div className="text-center py-12 px-4 bg-white rounded-2xl border border-slate-200">
+              <p className="text-xs text-slate-500">
+                Không tìm thấy bài nộp nào khớp với từ khóa &ldquo;<strong>{searchTerm}</strong>&rdquo;
+              </p>
+            </div>
           ) : (
-            history.map((record, index) => (
+            filteredHistory.map((record, index) => (
               <div
                 key={`${record.timestamp}-${record.studentName}-${index}`}
                 className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-sky-300 hover:shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
@@ -183,19 +210,10 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs flex-shrink-0">
-          {history.length > 0 && (
-            <button
-              onClick={onClearHistory}
-              className="flex items-center gap-1.5 text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Xóa bộ nhớ đệm</span>
-            </button>
-          )}
+        <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end text-xs flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition-colors cursor-pointer ml-auto"
+            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition-colors cursor-pointer"
           >
             Đóng
           </button>

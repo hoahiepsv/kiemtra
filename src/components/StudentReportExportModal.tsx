@@ -22,9 +22,9 @@ import {
   getSubmissionHistory,
   fetchSubmissionsFromData2,
   syncSubmissionsFromSheetToHistory,
-  clearSubmissionHistory,
   deleteSubmissionFromHistory,
 } from '../utils/syncService';
+import { matchSearchQuery } from '../utils/gradeService';
 import { StudentReportCard } from './StudentReportCard';
 import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
 import { toPng } from 'html-to-image';
@@ -55,6 +55,9 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
 
   // Preview single student card
   const [previewStudent, setPreviewStudent] = useState<SubmissionRecord | null>(null);
+
+  // ĐẶC QUYỀN GIÁO VIÊN: Tùy chọn hiện/ẩn đáp án chuẩn khi xuất phiếu ảnh
+  const [includeCorrectAnswers, setIncludeCorrectAnswers] = useState(false);
 
   // Active rendering student for html-to-image capture
   const [capturingStudent, setCapturingStudent] = useState<SubmissionRecord | null>(null);
@@ -107,17 +110,6 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
     setIsLoading(false);
   };
 
-  const handleClearLocalHistory = () => {
-    if (
-      window.confirm(
-        'Bạn có chắc muốn xóa sạch toàn bộ bài nộp thử nghiệm trên thiết bị này (như sda, HIỆP, wew, dsd...)?\n\nDữ liệu trên Google Sheets của bạn sẽ được giữ nguyên an toàn.'
-      )
-    ) {
-      clearSubmissionHistory();
-      loadStudents();
-    }
-  };
-
   const handleDeleteSingleStudent = (student: SubmissionRecord) => {
     const key = getStudentKey(student);
     setStudents((prev) => prev.filter((s) => getStudentKey(s) !== key));
@@ -131,11 +123,12 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
 
   const getStudentKey = (s: SubmissionRecord) => `${s.stt}_${s.studentName}_${s.className}`;
 
-  // Filtered students list
+  // Filtered students list - Không phân biệt hoa thường, khoảng cách và dấu tiếng Việt
   const filteredStudents = students.filter((s) => {
     const matchSearch =
-      s.studentName.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-      s.className.toLowerCase().includes(searchKeyword.toLowerCase());
+      !searchKeyword.trim() ||
+      matchSearchQuery(s.studentName, searchKeyword) ||
+      matchSearchQuery(s.className, searchKeyword);
     const matchClass = selectedClass === 'all' || s.className === selectedClass;
     return matchSearch && matchClass;
   });
@@ -341,15 +334,6 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
 
             <div className="flex items-center gap-2">
               <button
-                onClick={handleClearLocalHistory}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
-                title="Xóa các bài nộp thử nghiệm lưu trên máy này (như sda, HIỆP, wew, dsd...)"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Xóa bài nộp rác trên máy</span>
-              </button>
-
-              <button
                 onClick={loadStudents}
                 disabled={isLoading}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer transition-colors shadow-2xs"
@@ -390,8 +374,8 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
             </div>
           </div>
 
-          {/* Selection counter & bulk actions */}
-          <div className="flex items-center justify-between text-xs pt-1">
+          {/* Selection counter, Teacher Answer Key Toggle & bulk actions */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 text-xs pt-2 border-t border-slate-200">
             <button
               onClick={handleSelectAll}
               className="flex items-center gap-1.5 font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer"
@@ -408,10 +392,38 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
               </span>
             </button>
 
-            <span className="font-medium text-slate-600">
-              Đã chọn: <strong className="text-emerald-700 font-bold">{selectedCount}</strong> /{' '}
-              {filteredStudents.length} học sinh
-            </span>
+            {/* ĐẶC QUYỀN GIÁO VIÊN: Nút bật/tắt hiện đáp án chuẩn khi xuất phiếu ảnh */}
+            <div className="flex items-center gap-3">
+              <label
+                className={`flex items-center gap-2 cursor-pointer select-none px-3 py-1.5 rounded-xl border transition-all ${
+                  includeCorrectAnswers
+                    ? 'bg-amber-100 border-amber-400 text-amber-950 shadow-xs'
+                    : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+                }`}
+                title="Bật/Tắt hiển thị cột đáp án chuẩn của đề thi trên phiếu ảnh"
+              >
+                <input
+                  type="checkbox"
+                  checked={includeCorrectAnswers}
+                  onChange={(e) => setIncludeCorrectAnswers(e.target.checked)}
+                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer accent-amber-600"
+                />
+                <span className="text-xs font-bold flex items-center gap-1.5">
+                  <span className="hidden xs:inline">Hiện đáp án đúng</span>
+                  <span className="xs:hidden">Hiện Đ/A</span>
+                  {includeCorrectAnswers ? (
+                    <span className="text-[10px] bg-amber-600 text-white px-1.5 py-0.5 rounded font-black">BẬT</span>
+                  ) : (
+                    <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-medium">TẮT</span>
+                  )}
+                </span>
+              </label>
+
+              <span className="font-medium text-slate-600 hidden md:inline">
+                Đã chọn: <strong className="text-emerald-700 font-bold">{selectedCount}</strong> /{' '}
+                {filteredStudents.length} học sinh
+              </span>
+            </div>
           </div>
         </div>
 
@@ -628,6 +640,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
               submission={capturingStudent}
               config={config}
               questions={questions}
+              showCorrectAnswers={includeCorrectAnswers}
             />
           </div>
         )}
@@ -637,17 +650,29 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
       {previewStudent && (
         <div className="fixed inset-0 z-60 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-5 py-3 bg-slate-800 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-semibold">
-                <Eye className="w-4 h-4 text-emerald-400" />
-                <span>Xem trước ảnh phiếu báo cáo: {previewStudent.studentName} ({previewStudent.className})</span>
+            <div className="px-5 py-3 bg-slate-800 text-white flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-semibold truncate">
+                <Eye className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span className="truncate">Xem trước ảnh phiếu báo cáo: {previewStudent.studentName} ({previewStudent.className})</span>
               </div>
-              <button
-                onClick={() => setPreviewStudent(null)}
-                className="p-1 rounded-lg hover:bg-white/20 text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                <label className="flex items-center gap-1.5 text-xs text-amber-200 cursor-pointer bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg border border-slate-600 transition-colors select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeCorrectAnswers}
+                    onChange={(e) => setIncludeCorrectAnswers(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded text-amber-500 cursor-pointer accent-amber-500"
+                  />
+                  <span className="font-semibold text-[11px] sm:text-xs">Hiện đáp án</span>
+                </label>
+                <button
+                  onClick={() => setPreviewStudent(null)}
+                  className="p-1 rounded-lg hover:bg-white/20 text-white cursor-pointer"
+                  title="Đóng xem trước"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 bg-slate-100 flex justify-center">
@@ -656,6 +681,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                   submission={previewStudent}
                   config={config}
                   questions={questions}
+                  showCorrectAnswers={includeCorrectAnswers}
                 />
               </div>
             </div>

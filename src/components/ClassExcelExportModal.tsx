@@ -19,6 +19,7 @@ import * as XLSX from 'xlsx';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import { fetchSubmissionsFromData2, getSubmissionHistory } from '../utils/syncService';
 import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
+import { matchSearchQuery } from '../utils/gradeService';
 
 interface ClassExcelExportModalProps {
   isOpen: boolean;
@@ -83,13 +84,14 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
     .filter((c): c is string => Boolean(c))
     .sort();
 
-  // Lọc học sinh theo lớp và từ khoá tìm kiếm
+  // Lọc học sinh theo lớp và từ khoá tìm kiếm - Không phân biệt hoa thường, khoảng cách và dấu tiếng Việt
   const filteredStudents = students.filter((s) => {
     const sClass = (s.className || '').trim().toUpperCase();
     const matchClass = selectedClass === 'all' || sClass === selectedClass;
     const matchSearch =
-      s.studentName.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-      s.className.toLowerCase().includes(searchKeyword.toLowerCase());
+      !searchKeyword.trim() ||
+      matchSearchQuery(s.studentName, searchKeyword) ||
+      matchSearchQuery(s.className, searchKeyword);
     return matchClass && matchSearch;
   });
 
@@ -557,7 +559,7 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
                 title="Xuất file gồm Sheet Tổng Hợp và mỗi lớp một Sheet riêng"
               >
                 <Layers className="w-4 h-4" />
-                <span>Xuất Tất Cả Các Lớp (Đa Sheet)</span>
+                <span>Xuất Tất Cả Các Lớp</span>
               </button>
             </div>
           </div>

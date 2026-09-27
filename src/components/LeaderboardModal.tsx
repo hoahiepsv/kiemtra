@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Trophy, Medal, Search, X, Flame } from 'lucide-react';
 import { SubmissionRecord } from '../types';
+import { matchSearchQuery } from '../utils/gradeService';
 
 interface LeaderboardModalProps {
   isOpen: boolean;
@@ -29,7 +30,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
       if (selectedClass !== 'all' && s.className.toLowerCase() !== selectedClass.toLowerCase()) {
         return false;
       }
-      if (searchTerm && !s.studentName.toLowerCase().includes(searchTerm.toLowerCase())) {
+      if (searchTerm && !matchSearchQuery(s.studentName, searchTerm)) {
         return false;
       }
       return true;

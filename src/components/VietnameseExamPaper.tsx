@@ -325,11 +325,11 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
               <table className="w-full text-center border-collapse text-xs font-sans">
                 <thead>
                   <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-400">
-                    <td className="p-1 px-2 border-r border-slate-400 text-[11px] font-serif w-14 font-extrabold bg-slate-200">
+                    <td className="p-1 px-2 border-r border-slate-400 text-[11px] font-serif font-extrabold bg-slate-200 whitespace-nowrap min-w-[70px]">
                       Câu
                     </td>
                     {mcResults.map((r, idx) => (
-                      <td key={r.questionId || idx} className="p-1 border-r border-slate-300 font-bold min-w-[28px] text-[11px]">
+                      <td key={r.questionId || idx} className="p-1 border-r border-slate-300 font-bold min-w-[36px] text-[11px]">
                         {r.orderNumber || idx + 1}
                       </td>
                     ))}
@@ -338,8 +338,8 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
                 <tbody className="divide-y divide-slate-300">
                   {/* Selected Answer Row */}
                   <tr className="bg-white">
-                    <td className="p-1 px-2 border-r border-slate-400 text-[10px] font-serif font-bold text-slate-700 bg-slate-50">
-                      Chọn
+                    <td className="p-1 px-2 border-r border-slate-400 text-[10px] font-serif font-bold text-slate-700 bg-slate-50 whitespace-nowrap">
+                      HS chọn
                     </td>
                     {mcResults.map((r, idx) => {
                       const isBlank = !r.studentAnswer || r.studentAnswer.trim() === '' || r.studentAnswer === '-';
@@ -359,22 +359,38 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
                       );
                     })}
                   </tr>
-                  {/* Evaluation Row (Đ / S) */}
-                  <tr className="bg-slate-50/70 text-[10px] font-extrabold">
-                    <td className="p-0.5 px-2 border-r border-slate-400 text-[10px] font-serif text-slate-600 bg-slate-100">
-                      Đ / S
+                  {/* Evaluation Row (Kết quả: Đúng / Sai) */}
+                  <tr className="bg-slate-50/70 text-[10px] font-bold">
+                    <td className="p-0.5 px-2 border-r border-slate-400 text-[10px] font-serif font-bold text-slate-700 bg-slate-100 whitespace-nowrap">
+                      Kết quả
                     </td>
                     {mcResults.map((r, idx) => (
                       <td
                         key={r.questionId || idx}
-                        className={`p-0.5 border-r border-slate-300 ${
-                          r.isCorrect ? 'text-emerald-700 font-black' : 'text-red-600 font-black'
+                        className={`p-0.5 border-r border-slate-300 font-extrabold text-[10px] ${
+                          r.isCorrect ? 'text-emerald-700' : 'text-red-600'
                         }`}
                       >
-                        {r.isCorrect ? 'Đ' : 'S'}
+                        {r.isCorrect ? 'Đúng' : 'Sai'}
                       </td>
                     ))}
                   </tr>
+                  {/* Correct Answer Row - CHỈ HIỂN THỊ KHI GIÁO VIÊN BẬT */}
+                  {showCorrectAnswers && (
+                    <tr className="bg-emerald-50 text-[10px] font-mono font-bold text-emerald-900">
+                      <td className="p-0.5 px-2 border-r border-slate-400 text-[10px] font-serif font-bold text-emerald-900 bg-emerald-100">
+                        Đ/A chuẩn
+                      </td>
+                      {mcResults.map((r, idx) => {
+                        const qObj = questions.find((q) => q.id === r.questionId);
+                        return (
+                          <td key={r.questionId || idx} className="p-0.5 border-r border-slate-300 font-black text-emerald-800">
+                            {r.correctAnswer || qObj?.correctAnswer || '-'}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )}
                   {/* Score per question */}
                   <tr className="text-[10px] font-mono text-slate-600">
                     <td className="p-0.5 px-2 border-r border-slate-400 text-[10px] font-serif text-slate-600 bg-slate-50">
@@ -386,69 +402,6 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
                       </td>
                     ))}
                   </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* Detailed list for Multiple Choice (Polite, clear tabular view) */}
-            <div className="border border-slate-300 rounded-sm overflow-hidden text-[11px]">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-100/90 text-slate-800 font-bold border-b border-slate-300 text-[10px] uppercase font-sans">
-                    <th className="py-1.5 px-2 text-center w-12 border-r border-slate-200">Câu</th>
-                    <th className="py-1.5 px-2.5 border-r border-slate-200">Nội dung câu hỏi tóm tắt</th>
-                    <th className="py-1.5 px-2 text-center w-28 border-r border-slate-200">HS chọn</th>
-                    {showCorrectAnswers && (
-                      <th className="py-1.5 px-2 text-center w-24 border-r border-slate-200">Đ/A chuẩn</th>
-                    )}
-                    <th className="py-1.5 px-2 text-center w-16 border-r border-slate-200">Đánh giá</th>
-                    <th className="py-1.5 px-2 text-right w-16">Điểm</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 font-sans text-[11px]">
-                  {mcResults.map((r, idx) => {
-                    const qObj = questions.find((q) => q.id === r.questionId);
-                    const isBlank = !r.studentAnswer || r.studentAnswer.trim() === '' || r.studentAnswer === '-';
-                    return (
-                      <tr
-                        key={r.questionId || idx}
-                        className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}
-                      >
-                        <td className="py-1.5 px-2 text-center font-bold text-slate-800 border-r border-slate-200">
-                          {r.orderNumber || idx + 1}
-                        </td>
-                        <td className="py-1.5 px-2.5 text-slate-700 border-r border-slate-200 line-clamp-1 max-w-[280px]">
-                          {qObj?.content || `Câu hỏi trắc nghiệm số ${r.orderNumber || idx + 1}`}
-                        </td>
-                        <td className="py-1.5 px-2 text-center font-mono font-bold border-r border-slate-200">
-                          {isBlank ? (
-                            <span className="text-slate-400 italic font-normal text-[10px] font-sans">
-                              (Để trống)
-                            </span>
-                          ) : (
-                            <span className={r.isCorrect ? 'text-blue-900' : 'text-red-600'}>
-                              {r.studentAnswer}
-                            </span>
-                          )}
-                        </td>
-                        {showCorrectAnswers && (
-                          <td className="py-1.5 px-2 text-center font-mono font-bold text-emerald-800 border-r border-slate-200">
-                            {r.correctAnswer || qObj?.correctAnswer || '-'}
-                          </td>
-                        )}
-                        <td className="py-1.5 px-2 text-center border-r border-slate-200">
-                          {r.isCorrect ? (
-                            <span className="font-bold text-emerald-700 text-[10px]">Đúng</span>
-                          ) : (
-                            <span className="font-bold text-red-600 text-[10px]">Sai</span>
-                          )}
-                        </td>
-                        <td className="py-1.5 px-2 text-right font-mono font-bold text-slate-800">
-                          {String(r.earnedPoints).replace('.', ',')}đ
-                        </td>
-                      </tr>
-                    );
-                  })}
                 </tbody>
               </table>
             </div>
@@ -483,15 +436,41 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
                           {qObj?.content || `Câu hỏi tự luận`}
                         </span>
                       </p>
-                      <span className="flex-shrink-0 font-mono font-bold text-[11px] text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
-                        {String(r.earnedPoints).replace('.', ',')} / {String(r.maxPoints).replace('.', ',')} đ
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span
+                          className={`font-sans font-extrabold text-[10px] px-2 py-0.5 rounded border ${
+                            r.isCorrect
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                              : 'bg-red-50 text-red-600 border-red-200'
+                          }`}
+                        >
+                          {r.isCorrect ? 'Đúng' : 'Sai'}
+                        </span>
+                        <span className="font-mono font-bold text-[11px] text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                          {String(r.earnedPoints).replace('.', ',')} / {String(r.maxPoints).replace('.', ',')} đ
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="pl-3 border-l-2 border-blue-900/40 bg-blue-50/20 p-2 rounded-xs">
-                      <span className="text-[10px] font-bold uppercase text-slate-500 block mb-0.5">
-                        Bài làm của học sinh:
-                      </span>
+                    <div
+                      className={`pl-3 border-l-2 p-2 rounded-xs ${
+                        r.isCorrect
+                          ? 'border-emerald-600 bg-emerald-50/25'
+                          : 'border-red-500 bg-red-50/20'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-[10px] font-bold uppercase text-slate-500">
+                          Bài làm của học sinh:
+                        </span>
+                        <span
+                          className={`text-[10px] font-extrabold ${
+                            r.isCorrect ? 'text-emerald-700' : 'text-red-600'
+                          }`}
+                        >
+                          Kết quả: {r.isCorrect ? 'Đúng' : 'Sai'}
+                        </span>
+                      </div>
                       {isBlank ? (
                         <p className="italic text-slate-400 text-xs">(Học sinh không điền câu trả lời)</p>
                       ) : (
@@ -500,6 +479,18 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
                         </p>
                       )}
                     </div>
+
+                    {/* Essay answer key - CHỈ HIỂN THỊ KHI GIÁO VIÊN BẬT */}
+                    {showCorrectAnswers && (r.correctAnswer || qObj?.correctAnswer) && (
+                      <div className="pl-3 border-l-2 border-emerald-600 bg-emerald-50/60 p-2 rounded-xs text-xs">
+                        <span className="text-[10px] font-bold uppercase text-emerald-800 block mb-0.5">
+                          Đáp án chuẩn / Gợi ý của đề thi:
+                        </span>
+                        <p className="font-semibold text-emerald-950 font-sans">
+                          {r.correctAnswer || qObj?.correctAnswer}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 );
               })}

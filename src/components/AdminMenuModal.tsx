@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, FileCode2, FileSpreadsheet, ArrowRight, ShieldCheck, FolderArchive, FileEdit, Lock, History, Trash2 } from 'lucide-react';
+import { X, FileCode2, FileSpreadsheet, ArrowRight, ShieldCheck, FolderArchive, FileEdit, Lock, History } from 'lucide-react';
 import { AdminAuthSession } from '../types';
 
 interface AdminMenuModalProps {
@@ -11,7 +11,6 @@ interface AdminMenuModalProps {
   onSelectExportExcel: () => void;
   onSelectExamEditor: () => void;
   onSelectHistory: () => void;
-  onClearAllExamData?: () => void;
 }
 
 export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
@@ -23,7 +22,6 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
   onSelectExportExcel,
   onSelectExamEditor,
   onSelectHistory,
-  onClearAllExamData,
 }) => {
   if (!isOpen) return null;
 
@@ -211,36 +209,6 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
                 </p>
               </div>
             </div>
-          )}
-
-          {/* Option 6: Xóa sạch examdata */}
-          {onClearAllExamData && (
-            <button
-              onClick={() => {
-                if (window.confirm('Bạn có chắc chắn muốn XÓA SẠCH toàn bộ examdata (dữ liệu bài nộp thử nghiệm trên thiết bị, bài thi nháp, hàng đợi đồng bộ và bộ nhớ tạm)?')) {
-                  onClose();
-                  onClearAllExamData();
-                }
-              }}
-              className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-rose-100 hover:border-rose-500 bg-rose-50/40 hover:bg-rose-50/80 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-rose-600/20 group-hover:scale-105 transition-transform">
-                <Trash2 className="w-6 h-6" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <h4 className="text-base sm:text-lg font-bold text-rose-700 group-hover:text-rose-800 transition-colors">
-                    6. Xóa sạch examdata (Dọn sạch dữ liệu thi)
-                  </h4>
-                  <span className="text-rose-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
-                    <ArrowRight className="w-4 h-4" />
-                  </span>
-                </div>
-                <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                  Xóa toàn bộ dữ liệu bài nộp thử nghiệm lưu trên máy, xóa bài nháp, làm sạch bộ nhớ tạm để chuẩn bị cho kỳ kiểm tra mới hoàn toàn sạch sẽ.
-                </p>
-              </div>
-            </button>
           )}
         </div>
 
