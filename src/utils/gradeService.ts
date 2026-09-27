@@ -35,6 +35,44 @@ export function normalizeKeywords(str: string): string {
 }
 
 /**
+ * So khớp tìm kiếm chuỗi (tên học sinh, lớp, ...)
+ * Không phân biệt chữ hoa / chữ thường, không phân biệt khoảng cách và dấu tiếng Việt.
+ * Ví dụ: "nguyen van a", "nguyenvana", "NGUYEN VAN A", "Nguyen   Van A", "van a", "a van" đều khớp với "Nguyễn Văn A".
+ */
+export function matchSearchQuery(
+  target: string | undefined | null,
+  query: string | undefined | null
+): boolean {
+  if (!query || !query.trim()) return true;
+  if (!target || !target.trim()) return false;
+
+  const cleanTarget = removeVietnameseAccents(target).toLowerCase();
+  const cleanQuery = removeVietnameseAccents(query).toLowerCase();
+
+  // 1. So khớp không khoảng cách (nguyenvana khớp với Nguyễn Văn A)
+  const noSpaceTarget = cleanTarget.replace(/\s+/g, '');
+  const noSpaceQuery = cleanQuery.replace(/\s+/g, '');
+  if (noSpaceQuery && noSpaceTarget.includes(noSpaceQuery)) {
+    return true;
+  }
+
+  // 2. So khớp có khoảng cách đơn chuẩn hóa
+  const normalizedTarget = cleanTarget.replace(/\s+/g, ' ').trim();
+  const normalizedQuery = cleanQuery.replace(/\s+/g, ' ').trim();
+  if (normalizedTarget.includes(normalizedQuery)) {
+    return true;
+  }
+
+  // 3. So khớp từng từ (tất cả các từ khóa gõ vào đều xuất hiện trong tên mục tiêu)
+  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  if (queryTokens.length > 1 && queryTokens.every((token) => noSpaceTarget.includes(token))) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Tách chuỗi các đáp án chấp nhận được thành mảng các đáp án.
  * Dữ liệu lưu trong data1 theo định dạng: "đáp án 1 / đáp án 2 / ..."
  * Hỗ trợ dấu phân tách: " / ", "/", "|", ";"
