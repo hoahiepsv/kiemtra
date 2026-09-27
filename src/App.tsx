@@ -7,6 +7,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Loader2 } from 'lucide-react';
 import { Header } from './components/Header';
 import { StudentStartForm } from './components/StudentStartForm';
 import { ExamScreen } from './components/ExamScreen';
@@ -108,6 +109,7 @@ export default function App() {
 
   // Submissions state
   const [activeSubmission, setActiveSubmission] = useState<SubmissionRecord | null>(null);
+  const [isSubmittingExam, setIsSubmittingExam] = useState(false);
 
   // Existing draft detection
   const [existingDraft, setExistingDraft] = useState<DraftExam | null>(() => loadDraftExam());
@@ -435,102 +437,117 @@ export default function App() {
         timerRef.current = null;
       }
 
-      const now = new Date();
-      const endTime = formatDateForSheet(now);
-      const elapsedSeconds = Math.max(1, config.durationMinutes * 60 - remainingSeconds);
-      const totalDuration = formatDurationForSheet(elapsedSeconds);
+      setIsSubmittingExam(true);
+      const submitStartTime = Date.now();
 
-      // Grade each question
-      let totalScore = 0;
-      let maxScore = 0;
-      const scoreParts: string[] = [];
+      try {
+        const now = new Date();
+        const endTime = formatDateForSheet(now);
+        const elapsedSeconds = Math.max(1, config.durationMinutes * 60 - remainingSeconds);
+        const totalDuration = formatDurationForSheet(elapsedSeconds);
 
-      const questionResults = questions.map((q, index) => {
-        maxScore += q.points;
-        const studentAns = answers[q.id];
-        let isCorrect = false;
-        let answerText = '';
-        let isBlank = false;
+        // Grade each question
+        let totalScore = 0;
+        let maxScore = 0;
+        const scoreParts: string[] = [];
 
-        if (q.type === 'Trắc nghiệm 1 đáp án') {
-          answerText = studentAns?.selectedOption ? studentAns.selectedOption.trim() : '';
-          isBlank = !answerText;
-          isCorrect =
-            !isBlank && answerText.toUpperCase() === q.correctAnswer.trim().toUpperCase();
-        } else {
-          // Tự luận: so khớp không phân biệt hoa/thường, khoảng trắng thừa và dấu tiếng Việt
-          answerText = studentAns?.essayAnswer ? studentAns.essayAnswer.trim() : '';
-          isBlank = !answerText;
-          isCorrect = !isBlank && checkEssayAnswerMatch(answerText, q.correctAnswer);
-        }
+        const questionResults = questions.map((q, index) => {
+          maxScore += q.points;
+          const studentAns = answers[q.id];
+          let isCorrect = false;
+          let answerText = '';
+          let isBlank = false;
 
-        const earned = isCorrect ? q.points : 0;
-        totalScore += earned;
+          if (q.type === 'Trắc nghiệm 1 đáp án') {
+            answerText = studentAns?.selectedOption ? studentAns.selectedOption.trim() : '';
+            isBlank = !answerText;
+            isCorrect =
+              !isBlank && answerText.toUpperCase() === q.correctAnswer.trim().toUpperCase();
+          } else {
+            // Tự luận: so khớp không phân biệt hoa/thường, khoảng trắng thừa và dấu tiếng Việt
+            answerText = studentAns?.essayAnswer ? studentAns.essayAnswer.trim() : '';
+            isBlank = !answerText;
+            isCorrect = !isBlank && checkEssayAnswerMatch(answerText, q.correctAnswer);
+          }
 
-        const qNumber = index + 1;
-        // Build score string format: <Số câu : số điểm : "Đáp án HS chọn / đã gõ"> (Ví dụ: <1 : 0,5 : "A"> <2 : 1 : "Liên kết">)
-        const cleanAnswer = isBlank ? '' : answerText.trim();
-        scoreParts.push(formatScoreItem(qNumber, earned, cleanAnswer));
+          const earned = isCorrect ? q.points : 0;
+          totalScore += earned;
 
-        return {
-          questionId: q.id,
-          orderNumber: qNumber,
-          studentAnswer: isBlank ? '' : answerText.trim(),
-          correctAnswer: q.correctAnswer,
-          isCorrect,
-          earnedPoints: earned,
-          maxPoints: q.points,
-          category: q.category || 'Kiến thức chung',
+          const qNumber = index + 1;
+          // Build score string format: <Số câu : số điểm : "Đáp án HS chọn / đã gõ"> (Ví dụ: <1 : 0,5 : "A"> <2 : 1 : "Liên kết">)
+          const cleanAnswer = isBlank ? '' : answerText.trim();
+          scoreParts.push(formatScoreItem(qNumber, earned, cleanAnswer));
+
+          return {
+            questionId: q.id,
+            orderNumber: qNumber,
+            studentAnswer: isBlank ? '' : answerText.trim(),
+            correctAnswer: q.correctAnswer,
+            isCorrect,
+            earnedPoints: earned,
+            maxPoints: q.points,
+            category: q.category || 'Kiến thức chung',
+          };
+        });
+
+        // Round to 1 decimal place
+        totalScore = Math.round(totalScore * 10) / 10;
+        maxScore = Math.round(maxScore * 10) / 10;
+        const scoreString = scoreParts.join(' ');
+
+        // Lấy IP học sinh đang làm bài để lưu vào cột 9 của data2
+        const clientIp = await fetchClientIp();
+
+        const record: SubmissionRecord = {
+          stt: 1,
+          studentName: studentName || 'Học sinh',
+          className: className || '',
+          totalScore,
+          maxScore,
+          scoreString,
+          startTime: startFormattedTime || endTime,
+          endTime,
+          totalDuration,
+          ipAddress: clientIp,
+          timestamp: Date.now(),
+          syncedToData2: false,
+          questionResults,
         };
-      });
 
-      // Round to 1 decimal place
-      totalScore = Math.round(totalScore * 10) / 10;
-      maxScore = Math.round(maxScore * 10) / 10;
-      const scoreString = scoreParts.join(' ');
+        // Clear the draft now that it's submitted
+        clearDraftExam();
 
-      // Lấy IP học sinh đang làm bài để lưu vào cột 9 của data2
-      const clientIp = await fetchClientIp();
-
-      const record: SubmissionRecord = {
-        stt: 1,
-        studentName: studentName || 'Học sinh',
-        className: className || '',
-        totalScore,
-        maxScore,
-        scoreString,
-        startTime: startFormattedTime || endTime,
-        endTime,
-        totalDuration,
-        ipAddress: clientIp,
-        timestamp: Date.now(),
-        syncedToData2: false,
-        questionResults,
-      };
-
-      // Clear the draft now that it's submitted
-      clearDraftExam();
-
-      // Attempt sending to Google Sheet (data2)
-      if (config.data2Url && config.data2Url.trim()) {
-        const sendResult = await sendSubmissionToData2(config.data2Url, record);
-        if (sendResult.success) {
-          record.syncedToData2 = true;
-          setSyncToast('Đã gửi điểm cho giáo viên');
+        // Attempt sending to Google Sheet (data2)
+        if (config.data2Url && config.data2Url.trim()) {
+          const sendResult = await sendSubmissionToData2(config.data2Url, record);
+          if (sendResult.success) {
+            record.syncedToData2 = true;
+            setSyncToast('Đã gửi điểm cho giáo viên');
+          } else {
+            setSyncToast(sendResult.message);
+          }
         } else {
-          setSyncToast(sendResult.message);
+          setSyncToast('Đã lưu bài làm hoàn tất!');
         }
-      } else {
-        setSyncToast('Đã lưu bài làm hoàn tất!');
-      }
 
-      setActiveSubmission(record);
-      setScreen('result');
+        // Đảm bảo học sinh nhìn thấy trạng thái xoay với thông điệp chấm điểm tối thiểu 1.5 giây
+        const elapsed = Date.now() - submitStartTime;
+        if (elapsed < 1600) {
+          await new Promise((resolve) => setTimeout(resolve, 1600 - elapsed));
+        }
 
-      if (isTimeout) {
-        showPushNotification('Hết giờ làm bài!', `Đã tự động nộp bài cho ${studentName}. Điểm số: ${totalScore}/${maxScore}`);
-      } else {
-        showPushNotification('Nộp bài thành công!', `Chúc mừng ${studentName} đã hoàn thành với điểm số ${totalScore}/${maxScore}!`);
+        setActiveSubmission(record);
+        setScreen('result');
+
+        if (isTimeout) {
+          showPushNotification('Hết giờ làm bài!', `Đã tự động nộp bài cho ${studentName}. Điểm số: ${totalScore}/${maxScore}`);
+        } else {
+          showPushNotification('Nộp bài thành công!', `Chúc mừng ${studentName} đã hoàn thành với điểm số ${totalScore}/${maxScore}!`);
+        }
+      } catch (err) {
+        console.error('Lỗi khi chấm điểm & nộp bài:', err);
+      } finally {
+        setIsSubmittingExam(false);
       }
     },
     [
@@ -759,7 +776,6 @@ export default function App() {
         onSelectExportExcel={() => setShowClassExcelModal(true)}
         onSelectExamEditor={() => setShowExamEditorModal(true)}
         onSelectHistory={() => setShowHistoryModal(true)}
-        onClearAllExamData={handleClearAllExamData}
       />
 
       {/* MODAL 1: Apps Script Generator & Config */}
@@ -789,12 +805,6 @@ export default function App() {
         onSelectSubmission={(sub) => {
           setPreviewSubmission(sub);
           setShowPdfModal(true);
-        }}
-        onClearHistory={() => {
-          if (window.confirm('Bạn có chắc muốn xóa bộ nhớ đệm lịch sử bài nộp trên trình duyệt này? (Dữ liệu trên Cơ sở dữ liệu vẫn còn nguyên vẹn)')) {
-            clearSubmissionHistory();
-            setHistoryList([]);
-          }
         }}
         onDeleteSubmission={(sub) => {
           const updated = deleteSubmissionFromHistory(sub.studentName, sub.className, sub.endTime);
@@ -832,6 +842,36 @@ export default function App() {
           config={config}
           questions={questions}
         />
+      )}
+
+      {/* TRẠNG THÁI XOAY CHỜ CHẤM ĐIỂM KHI HỌC SINH NỘP BÀI */}
+      {isSubmittingExam && (
+        <div className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-md flex items-center justify-center p-4 text-center animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-sky-100 flex flex-col items-center space-y-4 animate-in zoom-in-95 duration-200">
+            {/* Vòng quay hoạt họa với spinner */}
+            <div className="relative flex items-center justify-center my-2">
+              <div className="w-20 h-20 rounded-full border-4 border-sky-100 border-t-sky-600 animate-spin" />
+              <div className="absolute w-12 h-12 rounded-full bg-sky-50 flex items-center justify-center text-sky-600">
+                <Loader2 className="w-6 h-6 animate-spin text-sky-600" />
+              </div>
+            </div>
+
+            {/* Dòng chữ chính xác theo yêu cầu người dùng */}
+            <div className="space-y-1.5">
+              <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                Đang chấm điểm, các bạn vui lòng đợi giây lát!
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-500 font-medium">
+                Hệ thống đang đối chiếu bài làm, tính toán điểm số và lưu vào cơ sở dữ liệu...
+              </p>
+            </div>
+
+            {/* Thanh tiến trình vi mô sinh động */}
+            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-1">
+              <div className="h-full bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 rounded-full w-full animate-pulse" />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
