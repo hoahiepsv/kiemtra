@@ -861,9 +861,6 @@ export default function App() {
               <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
                 Đang chấm điểm, các bạn vui lòng đợi giây lát!
               </h3>
-              <p className="text-xs sm:text-sm text-slate-500 font-medium">
-                Hệ thống đang đối chiếu bài làm, tính toán điểm số và lưu vào cơ sở dữ liệu...
-              </p>
             </div>
 
             {/* Thanh tiến trình vi mô sinh động */}
