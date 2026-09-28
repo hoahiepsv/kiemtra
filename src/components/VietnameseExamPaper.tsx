@@ -570,7 +570,7 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
 
         {/* COPYRIGHT & SYSTEM NOTICE */}
         <div className="mt-4 pt-2 border-t border-slate-200 text-center text-[9px] text-slate-400 font-sans">
-          <span>Hệ thống Kiểm Tra Đánh Giá Năng Lực Trực Tuyến • Bản quyền phát triển: </span>
+          <span>Hệ thống Kiểm Tra Đánh Giá Năng Lực Trực Tuyến • Tác giả phần mềm: </span>
           <strong className="text-slate-600">{config.copyrightText || 'Lê Hoà Hiệp - 0983.676.470'}</strong>
         </div>
       </div>

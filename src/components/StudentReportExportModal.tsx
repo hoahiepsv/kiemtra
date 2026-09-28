@@ -191,6 +191,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
       pixelRatio: 2,
       cacheBust: true,
       backgroundColor: '#ffffff',
+      skipFonts: true,
       height: scrollHeight,
       width: scrollWidth,
       style: {

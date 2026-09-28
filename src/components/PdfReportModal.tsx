@@ -44,6 +44,7 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
         pixelRatio: 2,
         cacheBust: true,
         backgroundColor: '#ffffff',
+        skipFonts: true,
         height: scrollHeight,
         width: scrollWidth,
         style: {
