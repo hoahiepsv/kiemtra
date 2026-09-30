@@ -50,6 +50,7 @@ import {
   getSubmissionHistory,
   clearSubmissionHistory,
   deleteSubmissionFromHistory,
+  updateSubmissionInHistory,
   clearAllExamData,
 } from './utils/syncService';
 import { checkEssayAnswerMatch } from './utils/gradeService';
@@ -66,8 +67,11 @@ export default function App() {
         const parsed = JSON.parse(saved);
         const isOldData1 = !parsed.data1Url || parsed.data1Url.includes('AKfycbzVR-FeTa2IZ20Nodk3ts3TUJqiadghILLCzyc8NZ6EAqzECm9gSbFVvA4EBmmOMpCO2A');
         const activeData1Url = isOldData1 ? DEFAULT_EXAM_CONFIG.data1Url : normalizeAppsScriptUrl(parsed.data1Url);
-        const isOldData2 = parsed.data2Url && parsed.data2Url.includes('AKfycbw3o7fi087YgBy8WjQZwWqavHeUN8jFfr6T3d2kuWkF4WMajeUlI8xajSP0ZkbPKGbB');
-        const activeData2Url = isOldData2 || !parsed.data2Url ? DEFAULT_EXAM_CONFIG.data2Url : normalizeAppsScriptUrl(parsed.data2Url);
+        const isOldData2 =
+          !parsed.data2Url ||
+          parsed.data2Url.includes('AKfycbw3o7fi087YgBy8WjQZwWqavHeUN8jFfr6T3d2kuWkF4WMajeUlI8xajSP0ZkbPKGbB') ||
+          parsed.data2Url.includes('AKfycbxxT7uc08D92XLmNaTvbXJvrrDBYN257-ByspJ00BtOJvankVLbdqfHKddfDm-7BG2s');
+        const activeData2Url = isOldData2 ? DEFAULT_EXAM_CONFIG.data2Url : normalizeAppsScriptUrl(parsed.data2Url);
         return {
           ...DEFAULT_EXAM_CONFIG,
           ...parsed,
@@ -498,8 +502,14 @@ export default function App() {
         // Lấy IP học sinh đang làm bài để lưu vào cột 9 của data2
         const clientIp = await fetchClientIp();
 
+        // Xác định STT chính xác theo thứ tự nộp bài (thay vì cố định 1)
+        const existingHistory = getSubmissionHistory();
+        const nextSTT = existingHistory.length > 0
+          ? Math.max(...existingHistory.map((h) => Number(h.stt) || 0), 0) + 1
+          : 1;
+
         const record: SubmissionRecord = {
-          stt: 1,
+          stt: nextSTT,
           studentName: studentName || 'Học sinh',
           className: className || '',
           totalScore,
@@ -841,6 +851,24 @@ export default function App() {
           submission={previewSubmission || activeSubmission!}
           config={config}
           questions={questions}
+          isTeacherMode={!!adminSession}
+          onUpdateSubmission={async (updated) => {
+            if (previewSubmission) {
+              setPreviewSubmission(updated);
+            }
+            if (
+              activeSubmission &&
+              String(activeSubmission.studentName).toLowerCase().trim() ===
+                String(updated.studentName).toLowerCase().trim()
+            ) {
+              setActiveSubmission(updated);
+            }
+            const updatedList = updateSubmissionInHistory(updated);
+            setHistoryList(updatedList);
+            if (config.data2Url) {
+              await sendSubmissionToData2(config.data2Url, updated, { isUpdate: true });
+            }
+          }}
         />
       )}
 
