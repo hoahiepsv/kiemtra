@@ -16,6 +16,8 @@ import {
   Layers,
   Sparkles,
   Trash2,
+  Save,
+  Loader2,
 } from 'lucide-react';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import {
@@ -23,8 +25,10 @@ import {
   fetchSubmissionsFromData2,
   syncSubmissionsFromSheetToHistory,
   deleteSubmissionFromHistory,
+  updateSubmissionInHistory,
+  sendSubmissionToData2,
 } from '../utils/syncService';
-import { matchSearchQuery } from '../utils/gradeService';
+import { matchSearchQuery, overrideEssayGrade } from '../utils/gradeService';
 import { StudentReportCard } from './StudentReportCard';
 import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
 import { toPng } from 'html-to-image';
@@ -55,6 +59,65 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
 
   // Preview single student card
   const [previewStudent, setPreviewStudent] = useState<SubmissionRecord | null>(null);
+  const [previewHasUnsavedChanges, setPreviewHasUnsavedChanges] = useState(false);
+  const [isPreviewSaving, setIsPreviewSaving] = useState(false);
+  const [previewSaveSuccess, setPreviewSaveSuccess] = useState(false);
+
+  // Modal xác nhận xóa học sinh
+  const [studentToDelete, setStudentToDelete] = useState<SubmissionRecord | null>(null);
+
+  const getStudentKey = (s: SubmissionRecord) => `${s.stt ?? ''}_${String(s.studentName || '')}_${String(s.className || '')}`;
+
+  const handleSavePreviewStudent = async () => {
+    if (!previewStudent) return;
+    setIsPreviewSaving(true);
+    try {
+      const targetName = String(previewStudent.studentName || '').toLowerCase().trim();
+      const targetClass = String(previewStudent.className || '').toLowerCase().trim();
+      const targetKey = getStudentKey(previewStudent);
+
+      setStudents((prev) => {
+        let foundIdx = prev.findIndex((s) => getStudentKey(s) === targetKey);
+        if (foundIdx === -1 && previewStudent.stt !== undefined) {
+          foundIdx = prev.findIndex((s) => s.stt === previewStudent.stt);
+        }
+        if (foundIdx === -1) {
+          foundIdx = prev.findIndex(
+            (s) =>
+              String(s.studentName || '').toLowerCase().trim() === targetName &&
+              String(s.className || '').toLowerCase().trim() === targetClass
+          );
+        }
+
+        if (foundIdx !== -1) {
+          const next = [...prev];
+          next[foundIdx] = previewStudent;
+          return next.filter((s, idx) => {
+            if (idx === foundIdx) return true;
+            const sameName = String(s.studentName || '').toLowerCase().trim() === targetName;
+            const sameClass = String(s.className || '').toLowerCase().trim() === targetClass;
+            const sameSTT = previewStudent.stt !== undefined && s.stt === previewStudent.stt;
+            return !(sameSTT || (sameName && sameClass));
+          });
+        }
+        return [previewStudent, ...prev];
+      });
+
+      updateSubmissionInHistory(previewStudent);
+      if (config.data2Url) {
+        await sendSubmissionToData2(config.data2Url, previewStudent, { isUpdate: true });
+      }
+      setPreviewHasUnsavedChanges(false);
+      setPreviewSaveSuccess(true);
+      setTimeout(() => {
+        setPreviewSaveSuccess(false);
+      }, 3500);
+    } catch (err) {
+      console.error('Lỗi khi lưu điểm:', err);
+    } finally {
+      setIsPreviewSaving(false);
+    }
+  };
 
   // ĐẶC QUYỀN GIÁO VIÊN: Tùy chọn hiện/ẩn đáp án chuẩn khi xuất phiếu ảnh
   const [includeCorrectAnswers, setIncludeCorrectAnswers] = useState(false);
@@ -121,20 +184,18 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
     deleteSubmissionFromHistory(student.studentName, student.className, student.endTime);
   };
 
-  const getStudentKey = (s: SubmissionRecord) => `${s.stt}_${s.studentName}_${s.className}`;
-
   // Filtered students list - Không phân biệt hoa thường, khoảng cách và dấu tiếng Việt
   const filteredStudents = students.filter((s) => {
     const matchSearch =
       !searchKeyword.trim() ||
       matchSearchQuery(s.studentName, searchKeyword) ||
       matchSearchQuery(s.className, searchKeyword);
-    const matchClass = selectedClass === 'all' || s.className === selectedClass;
+    const matchClass = selectedClass === 'all' || String(s.className || '').trim() === selectedClass;
     return matchSearch && matchClass;
   });
 
   // Unique classes for filter
-  const classOptions = Array.from(new Set(students.map((s) => s.className))).filter(Boolean);
+  const classOptions = Array.from(new Set(students.map((s) => String(s.className || '').trim()))).filter(Boolean);
 
   // Toggle selection
   const handleToggleSelect = (key: string) => {
@@ -535,7 +596,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteSingleStudent(student);
+                          setStudentToDelete(student);
                         }}
                         className="p-2 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 border border-slate-200 transition-colors cursor-pointer"
                         title="Xóa học sinh này khỏi danh sách"
@@ -683,11 +744,22 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                   config={config}
                   questions={questions}
                   showCorrectAnswers={includeCorrectAnswers}
+                  isTeacherMode={true}
+                  onToggleEssayCorrect={(orderNumber, isCorrect) => {
+                    const updated = overrideEssayGrade(previewStudent, questions, orderNumber, isCorrect);
+                    setPreviewStudent(updated);
+                    setPreviewHasUnsavedChanges(true);
+                    setPreviewSaveSuccess(false);
+                  }}
+                  onSaveRegradedScore={handleSavePreviewStudent}
+                  hasUnsavedChanges={previewHasUnsavedChanges}
+                  isSaveSuccessful={previewSaveSuccess}
+                  isSaving={isPreviewSaving}
                 />
               </div>
             </div>
 
-            <div className="p-3 bg-white border-t border-slate-200 flex items-center justify-between">
+            <div className="p-3 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
               <button
                 onClick={() => setPreviewStudent(null)}
                 className="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 cursor-pointer"
@@ -695,15 +767,104 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                 Đóng xem trước
               </button>
 
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSavePreviewStudent}
+                  disabled={isPreviewSaving}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 disabled:opacity-75 ${
+                    previewSaveSuccess
+                      ? 'bg-emerald-600 text-white'
+                      : previewHasUnsavedChanges
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md ring-2 ring-blue-400 ring-offset-1'
+                      : 'bg-slate-800 hover:bg-slate-700 text-amber-300'
+                  }`}
+                  title="Lưu điểm đã chấm lại vào hệ thống"
+                >
+                  {isPreviewSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Đang lưu...</span>
+                    </>
+                  ) : previewSaveSuccess ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-200" />
+                      <span>Đã lưu thành công!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Lưu cập nhật điểm cho hs</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleExportSingle(previewStudent);
+                    setPreviewStudent(null);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Tải ảnh này về máy</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL XÁC NHẬN XÓA HỌC SINH */}
+      {studentToDelete && (
+        <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-base font-bold text-slate-800">
+                  Xác nhận xóa học sinh?
+                </h4>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Thầy/cô có chắc chắn muốn xóa học sinh này khỏi danh sách báo cáo? Hành động này sẽ đồng thời xóa bài làm đã lưu trong hệ thống.
+                </p>
+                <div className="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+                  <div className="font-bold text-slate-700">
+                    Họ và tên: <span className="text-sky-700 font-extrabold">{studentToDelete.studentName}</span>
+                  </div>
+                  <div className="text-slate-600">
+                    Lớp: <span className="font-semibold text-slate-800">{studentToDelete.className || 'Chưa rõ'}</span> &bull; Điểm số:{' '}
+                    <span className="font-black text-rose-600">{String(studentToDelete.totalScore).replace('.', ',')} đ</span>
+                  </div>
+                  {studentToDelete.endTime && (
+                    <div className="text-slate-400 text-[11px]">
+                      Thời gian nộp: {studentToDelete.endTime}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2.5">
               <button
-                onClick={() => {
-                  handleExportSingle(previewStudent);
-                  setPreviewStudent(null);
-                }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs cursor-pointer"
+                type="button"
+                onClick={() => setStudentToDelete(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Tải ảnh này về máy</span>
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleDeleteSingleStudent(studentToDelete);
+                  setStudentToDelete(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Xác nhận xóa</span>
               </button>
             </div>
           </div>

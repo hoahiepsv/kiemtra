@@ -1,16 +1,24 @@
 import React from 'react';
+import { Check, X, Save, CheckCircle2, Loader2 } from 'lucide-react';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import { formatExamDateTime, formatExamDuration, formatVietnameseFullDate } from '../utils/dateUtils';
 import { parseScoreStringDetailed } from '../utils/scoreStringUtils';
 
 export type ExamPaperTheme = 'navy' | 'vintage' | 'emerald' | 'burgundy';
 
-interface VietnameseExamPaperProps {
+export interface VietnameseExamPaperProps {
   submission: SubmissionRecord;
   config: ExamConfig;
   questions: Question[];
   theme?: ExamPaperTheme;
   showCorrectAnswers?: boolean;
+  isTeacherMode?: boolean;
+  isExportingImage?: boolean;
+  onToggleEssayCorrect?: (orderNumber: number, isCorrect: boolean) => void;
+  onSaveRegradedScore?: () => void;
+  hasUnsavedChanges?: boolean;
+  isSaveSuccessful?: boolean;
+  isSaving?: boolean;
 }
 
 export function scoreToVietnameseWords(score: number): string {
@@ -51,6 +59,13 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
   questions,
   theme = 'navy',
   showCorrectAnswers = false,
+  isTeacherMode = false,
+  isExportingImage = false,
+  onToggleEssayCorrect,
+  onSaveRegradedScore,
+  hasUnsavedChanges = false,
+  isSaveSuccessful = false,
+  isSaving = false,
 }) => {
   // Reconstruct question results
   const questionResults = React.useMemo(() => {
@@ -92,14 +107,14 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
   // Separate Multiple Choice and Essay questions
   const mcResults = React.useMemo(() => {
     return questionResults.filter((qr) => {
-      const q = questions.find((item) => item.id === qr.questionId);
+      const q = questions.find((item) => item.id === qr.questionId || item.orderNumber === qr.orderNumber);
       return !q || q.type === 'Trắc nghiệm 1 đáp án';
     });
   }, [questionResults, questions]);
 
   const essayResults = React.useMemo(() => {
     return questionResults.filter((qr) => {
-      const q = questions.find((item) => item.id === qr.questionId);
+      const q = questions.find((item) => item.id === qr.questionId || item.orderNumber === qr.orderNumber);
       return q && q.type === 'Tự luận';
     });
   }, [questionResults, questions]);
@@ -412,9 +427,16 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
         {essayResults.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center justify-between pb-1 mb-2 border-b border-slate-800">
-              <h3 className="font-bold text-xs uppercase tracking-wide text-slate-900">
-                II. PHẦN TỰ LUẬN ({essayResults.length} câu)
-              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-xs uppercase tracking-wide text-slate-900">
+                  II. PHẦN TỰ LUẬN ({essayResults.length} câu)
+                </h3>
+                {isTeacherMode && !isExportingImage && onToggleEssayCorrect && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 print:hidden hide-on-export">
+                    Quyền GV: Bấm Đúng / Sai để chấm lại
+                  </span>
+                )}
+              </div>
               <span className="text-[11px] text-slate-600 italic">
                 (Nội dung bài làm do học sinh điền/trình bày)
               </span>
@@ -422,7 +444,7 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
 
             <div className="space-y-3 font-sans text-xs">
               {essayResults.map((r, idx) => {
-                const qObj = questions.find((q) => q.id === r.questionId);
+                const qObj = questions.find((q) => q.id === r.questionId || q.orderNumber === r.orderNumber);
                 const isBlank = !r.studentAnswer || r.studentAnswer.trim() === '' || r.studentAnswer === '-';
                 return (
                   <div
@@ -436,20 +458,64 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
                           {qObj?.content || `Câu hỏi tự luận`}
                         </span>
                       </p>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <span
-                          className={`font-sans font-extrabold text-[10px] px-2 py-0.5 rounded border ${
-                            r.isCorrect
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                              : 'bg-red-50 text-red-600 border-red-200'
-                          }`}
-                        >
-                          {r.isCorrect ? 'Đúng' : 'Sai'}
-                        </span>
-                        <span className="font-mono font-bold text-[11px] text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
-                          {String(r.earnedPoints).replace('.', ',')} / {String(r.maxPoints).replace('.', ',')} đ
-                        </span>
-                      </div>
+
+                      {/* Khi ở quyền giáo viên: Nút chọn Đúng / Sai để chấm lại */}
+                      {isTeacherMode && !isExportingImage && onToggleEssayCorrect ? (
+                        <div className="flex items-center gap-1.5 flex-shrink-0 print:hidden hide-on-export">
+                          <div className="flex items-center rounded-lg p-0.5 bg-slate-100 border border-slate-300 shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleEssayCorrect(r.orderNumber, true);
+                              }}
+                              className={`px-2.5 py-0.5 rounded text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1 ${
+                                r.isCorrect
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50'
+                              }`}
+                              title="Bấm để chấm ĐÚNG (Cộng trọn điểm)"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Đúng</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleEssayCorrect(r.orderNumber, false);
+                              }}
+                              className={`px-2.5 py-0.5 rounded text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1 ${
+                                !r.isCorrect
+                                  ? 'bg-red-600 text-white shadow-xs'
+                                  : 'text-slate-600 hover:text-red-700 hover:bg-red-50'
+                              }`}
+                              title="Bấm để chấm SAI (0 điểm)"
+                            >
+                              <X className="w-3 h-3" />
+                              <span>Sai</span>
+                            </button>
+                          </div>
+                          <span className="font-mono font-bold text-[11px] text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                            {String(r.earnedPoints).replace('.', ',')} / {String(r.maxPoints).replace('.', ',')} đ
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span
+                            className={`font-sans font-extrabold text-[10px] px-2 py-0.5 rounded border ${
+                              r.isCorrect
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                : 'bg-red-50 text-red-600 border-red-200'
+                            }`}
+                          >
+                            {r.isCorrect ? 'Đúng' : 'Sai'}
+                          </span>
+                          <span className="font-mono font-bold text-[11px] text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                            {String(r.earnedPoints).replace('.', ',')} / {String(r.maxPoints).replace('.', ',')} đ
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div
@@ -495,6 +561,69 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
                 );
               })}
             </div>
+
+            {/* Nút lưu phía dưới phần tự luận cho giáo viên */}
+            {isTeacherMode && !isExportingImage && onSaveRegradedScore && (
+              <div className="mt-3.5 p-3.5 bg-gradient-to-r from-amber-50 via-orange-50/50 to-amber-50 border-2 border-dashed border-amber-300 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 hide-on-export print:hidden shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700 flex-shrink-0 shadow-2xs">
+                    <Save className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                      <span>Cập nhật kết quả chấm bài của học sinh</span>
+                      {hasUnsavedChanges && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-400">
+                          Chưa lưu thay đổi
+                        </span>
+                      )}
+                      {isSaveSuccessful && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          ✓ Đã lưu vào hệ thống
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
+                      Tổng điểm sau khi chấm: <strong className="text-red-600 font-extrabold text-sm">{String(submission.totalScore).replace('.', ',')} đ</strong>. Bấm nút bên cạnh để cập nhật điểm mới cho học sinh.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSaveRegradedScore();
+                  }}
+                  disabled={isSaving}
+                  className={`w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm active:scale-95 disabled:opacity-75 ${
+                    isSaveSuccessful
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : hasUnsavedChanges
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white ring-2 ring-amber-400 ring-offset-1 animate-pulse'
+                      : 'bg-slate-900 hover:bg-slate-800 text-amber-300'
+                  }`}
+                  title="Nhấn để lưu lại điểm đã chấm cho học sinh"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang lưu điểm...</span>
+                    </>
+                  ) : isSaveSuccessful ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                      <span>Đã lưu điểm thành công!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Lưu cập nhật điểm cho hs</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         )}
 

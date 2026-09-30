@@ -8,6 +8,13 @@ interface StudentReportCardProps {
   questions: Question[];
   theme?: ExamPaperTheme;
   showCorrectAnswers?: boolean;
+  isTeacherMode?: boolean;
+  isExportingImage?: boolean;
+  onToggleEssayCorrect?: (orderNumber: number, isCorrect: boolean) => void;
+  onSaveRegradedScore?: () => void;
+  hasUnsavedChanges?: boolean;
+  isSaveSuccessful?: boolean;
+  isSaving?: boolean;
 }
 
 export const StudentReportCard: React.FC<StudentReportCardProps> = ({
@@ -16,6 +23,13 @@ export const StudentReportCard: React.FC<StudentReportCardProps> = ({
   questions,
   theme = 'navy',
   showCorrectAnswers = false,
+  isTeacherMode = false,
+  isExportingImage = false,
+  onToggleEssayCorrect,
+  onSaveRegradedScore,
+  hasUnsavedChanges = false,
+  isSaveSuccessful = false,
+  isSaving = false,
 }) => {
   return (
     <div
@@ -28,6 +42,13 @@ export const StudentReportCard: React.FC<StudentReportCardProps> = ({
         questions={questions}
         theme={theme}
         showCorrectAnswers={showCorrectAnswers}
+        isTeacherMode={isTeacherMode}
+        isExportingImage={isExportingImage}
+        onToggleEssayCorrect={onToggleEssayCorrect}
+        onSaveRegradedScore={onSaveRegradedScore}
+        hasUnsavedChanges={hasUnsavedChanges}
+        isSaveSuccessful={isSaveSuccessful}
+        isSaving={isSaving}
       />
     </div>
   );

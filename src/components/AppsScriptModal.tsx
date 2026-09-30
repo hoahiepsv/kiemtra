@@ -234,6 +234,9 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
                   <p className="text-slate-600 text-xs mt-0.5">
                     Tự động nhận bài nộp của học sinh, ghi vào các cột: STT, TÊN HỌC SINH, LỚP, TỔNG ĐIỂM, ĐIỂM TỪNG CÂU, BẮT ĐẦU, NỘP BÀI, TỔNG THỜI GIAN, IP HỌC SINH (Cột 9).
                   </p>
+                  <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
+                    <span>★ Hỗ trợ sửa điểm: Tự động lưu đè số điểm mới vào đúng ô cột Tổng điểm của học sinh (không tạo thêm dòng mới)!</span>
+                  </div>
                 </div>
                 <button
                   onClick={() => handleCopy(APPS_SCRIPT_DATA2, 'data2')}
@@ -264,10 +267,14 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
                 <h5 className="font-bold text-slate-800">Cách chèn vào Google Sheets Data2:</h5>
                 <ol className="list-decimal pl-5 space-y-1 text-slate-600">
-                  <li>Mở file Google Sheet <strong>data2</strong> để lưu kết quả. Dòng 1 ghi đúng tiêu đề các cột: STT, TÊN HỌC SINH, LỚP, TỔNG ĐIỂM, ĐIỂM TỪNG CÂU, THỜI GIAN HS BẮT ĐẦU, THỜI GIAN HS NỘP BÀI, TỔNG THỜI GIAN, IP HỌC SINH (Cột 9).</li>
+                  <li>Mở file Google Sheet <strong>data2</strong> để lưu kết quả. Dòng 1 ghi tiêu đề các cột: STT, TÊN HỌC SINH, LỚP, TỔNG ĐIỂM, ĐIỂM TỪNG CÂU, THỜI GIAN HS BẮT ĐẦU, THỜI GIAN HS NỘP BÀI, TỔNG THỜI GIAN, IP HỌC SINH (Cột 9).</li>
                   <li>Vào <strong>Tiện ích mở rộng</strong> &gt; <strong>Apps Script</strong>.</li>
-                  <li>Dán mã trên vào, Lưu lại và Triển khai thành <strong>Ứng dụng web</strong> với quyền <strong>Bất kỳ ai (Anyone)</strong>.</li>
-                  <li>Dán URL vào tab cấu hình bên dưới. Mỗi khi học sinh nộp bài, kết quả sẽ tự động nhảy vào Sheet data2 ngay tức thì!</li>
+                  <li>Dán mã trên vào, bấm <strong>Lưu (Ctrl+S)</strong>.</li>
+                  <li>
+                    <strong>Quan trọng để cập nhật tính năng Sửa Điểm Không Tạo Dòng Mới:</strong><br />
+                    Vào <strong>Triển khai (Deploy)</strong> &gt; <strong>Quản lý bản triển khai (Manage deployments)</strong> &gt; bấm biểu tượng <strong>Cây bút (Chỉnh sửa)</strong> &gt; ở ô Phiên bản chọn <strong>Phiên bản mới (New version)</strong> &gt; nhấn <strong>Triển khai (Deploy)</strong>.
+                  </li>
+                  <li>Dán URL vào ô cấu hình bên dưới. Mỗi khi giáo viên sửa điểm câu tự luận, hệ thống sẽ tự động thay thế ô điểm của học sinh đó mà không tạo thêm dòng mới!</li>
                 </ol>
               </div>
             </div>

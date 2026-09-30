@@ -1,8 +1,9 @@
-import React, { useRef, useState } from 'react';
-import { X, Download, Loader2, CheckCircle2, Printer, Palette, FileText } from 'lucide-react';
+import React, { useRef, useState, useEffect } from 'react';
+import { X, Download, Loader2, CheckCircle2, Printer, Palette, FileText, CheckSquare, Save } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import { VietnameseExamPaper, ExamPaperTheme } from './VietnameseExamPaper';
+import { overrideEssayGrade } from '../utils/gradeService';
 
 interface PdfReportModalProps {
   isOpen: boolean;
@@ -10,6 +11,8 @@ interface PdfReportModalProps {
   submission: SubmissionRecord;
   config: ExamConfig;
   questions?: Question[];
+  isTeacherMode?: boolean;
+  onUpdateSubmission?: (updated: SubmissionRecord) => void;
 }
 
 export const PdfReportModal: React.FC<PdfReportModalProps> = ({
@@ -18,19 +21,66 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
   submission,
   config,
   questions = [],
+  isTeacherMode = false,
+  onUpdateSubmission,
 }) => {
   const reportRef = useRef<HTMLDivElement>(null);
+  const [currentSubmission, setCurrentSubmission] = useState<SubmissionRecord>(submission);
+  const [regradeNotice, setRegradeNotice] = useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaveSuccessful, setIsSaveSuccessful] = useState(false);
+  const [isExportingImage, setIsExportingImage] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<ExamPaperTheme>('navy');
 
+  useEffect(() => {
+    setCurrentSubmission(submission);
+    setHasUnsavedChanges(false);
+    setIsSaveSuccessful(false);
+  }, [submission]);
+
   if (!isOpen) return null;
+
+  const handleToggleEssayCorrect = (orderNumber: number, isCorrect: boolean) => {
+    const updated = overrideEssayGrade(currentSubmission, questions, orderNumber, isCorrect);
+    setCurrentSubmission(updated);
+    setHasUnsavedChanges(true);
+    setIsSaveSuccessful(false);
+    setRegradeNotice(
+      `Đã chuyển câu ${orderNumber} thành ${isCorrect ? 'ĐÚNG' : 'SAI'} (Điểm mới: ${String(updated.totalScore).replace('.', ',')} đ). Bấm 'Lưu cập nhật điểm cho hs' để xác nhận!`
+    );
+  };
+
+  const handleSaveRegradedScore = async () => {
+    setIsSaving(true);
+    try {
+      onUpdateSubmission?.(currentSubmission);
+      setHasUnsavedChanges(false);
+      setIsSaveSuccessful(true);
+      setRegradeNotice(
+        `✓ Đã lưu cập nhật điểm thành công cho học sinh ${currentSubmission.studentName} (${String(currentSubmission.totalScore).replace('.', ',')} đ)!`
+      );
+      setTimeout(() => {
+        setIsSaveSuccessful(false);
+      }, 4000);
+    } catch (err) {
+      console.error('Lỗi khi lưu điểm:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleDownloadImage = async () => {
     if (!reportRef.current) return;
     try {
       setIsDownloading(true);
       setDownloadSuccess(false);
+      setIsExportingImage(true);
+
+      // Wait a tick for DOM to update with export view
+      await new Promise((resolve) => setTimeout(resolve, 80));
 
       if (document.fonts) {
         await document.fonts.ready;
@@ -45,6 +95,12 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
         cacheBust: true,
         backgroundColor: '#ffffff',
         skipFonts: true,
+        filter: (domNode) => {
+          if (domNode instanceof HTMLElement && domNode.classList?.contains('hide-on-export')) {
+            return false;
+          }
+          return true;
+        },
         height: scrollHeight,
         width: scrollWidth,
         style: {
@@ -54,13 +110,13 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
         },
       });
 
-      const safeName = (submission.studentName || 'HocSinh')
+      const safeName = (currentSubmission.studentName || 'HocSinh')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/đ/g, 'd')
         .replace(/Đ/g, 'D')
         .replace(/[^a-zA-Z0-9]/g, '_');
-      const safeClass = (submission.className || 'Lop').replace(/[^a-zA-Z0-9]/g, '_');
+      const safeClass = (currentSubmission.className || 'Lop').replace(/[^a-zA-Z0-9]/g, '_');
 
       const link = document.createElement('a');
       link.download = `BaiKiemTra_${safeName}_${safeClass}.png`;
@@ -73,6 +129,7 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
       console.error('Lỗi khi xuất ảnh bài kiểm tra:', err);
       alert('Không thể tạo file ảnh bài kiểm tra. Vui lòng thử lại.');
     } finally {
+      setIsExportingImage(false);
       setIsDownloading(false);
     }
   };
@@ -177,11 +234,29 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
 
         {/* Scrollable Container with centered Vietnamese Exam Paper */}
         <div className="p-3 sm:p-6 overflow-y-auto flex-1 bg-slate-200/70 flex flex-col items-center print:p-0 print:bg-white print:overflow-visible">
-          {/* Sub Toolbar */}
-          <div className="w-full max-w-[820px] flex items-center justify-between pb-3 text-xs text-slate-600 print:hidden">
-            <span className="font-serif italic text-slate-500 text-[11px]">
-              Giao diện trang giấy thi học sinh • Con điểm đỏ và lời phê của giáo viên
-            </span>
+          {/* Sub Toolbar: Guidance for Teacher / Student */}
+          <div className="w-full max-w-[820px] flex flex-col gap-2 pb-3 text-xs text-slate-600 print:hidden">
+            <div className="flex items-center justify-between text-slate-600">
+              <span className="font-serif italic text-slate-500 text-[11px]">
+                Giao diện trang giấy thi học sinh • Con điểm đỏ và lời phê của giáo viên
+              </span>
+              {regradeNotice && (
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px] border border-emerald-300 animate-in fade-in duration-150">
+                  {regradeNotice}
+                </span>
+              )}
+            </div>
+
+            {isTeacherMode && (
+              <div className="bg-amber-50 border border-amber-300/80 rounded-xl p-2.5 px-3.5 flex items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <CheckSquare className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                  <span>
+                    <strong className="font-bold text-amber-950">Quyền giáo viên:</strong> Tại <strong>Mục II. PHẦN TỰ LUẬN</strong> bên dưới, thầy/cô có thể bấm nút <strong>Đúng</strong> hoặc <strong>Sai</strong> để chấm lại điểm nếu hệ thống nhận diện chưa chính xác. Điểm số và lời phê sẽ tự động cập nhật ngay lập tức.
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Capturable Vietnamese Exam Paper */}
@@ -190,14 +265,76 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
             className="w-full flex justify-center bg-white shadow-md print:shadow-none print:w-full"
           >
             <VietnameseExamPaper
-              submission={submission}
+              submission={currentSubmission}
               config={config}
               questions={questions}
               theme={selectedTheme}
               showCorrectAnswers={false}
+              isTeacherMode={isTeacherMode}
+              isExportingImage={isExportingImage}
+              onToggleEssayCorrect={handleToggleEssayCorrect}
+              onSaveRegradedScore={handleSaveRegradedScore}
+              hasUnsavedChanges={hasUnsavedChanges}
+              isSaveSuccessful={isSaveSuccessful}
+              isSaving={isSaving}
             />
           </div>
         </div>
+
+        {/* Teacher Bottom Persistent Action Bar */}
+        {isTeacherMode && (
+          <div className="bg-white border-t border-slate-200 px-4 py-3 sm:px-6 flex flex-wrap items-center justify-between gap-3 shadow-lg z-20 print:hidden flex-shrink-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="text-xs text-slate-700">
+                Học sinh: <strong className="text-slate-900 font-bold">{currentSubmission.studentName}</strong> ({currentSubmission.className})
+                {' • '}
+                Điểm số sau chấm: <strong className="text-red-600 font-extrabold text-sm">{String(currentSubmission.totalScore).replace('.', ',')} đ</strong>
+              </div>
+              {hasUnsavedChanges && (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                  Có thay đổi chưa lưu
+                </span>
+              )}
+              {isSaveSuccessful && (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  ✓ Đã lưu vào hệ thống
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSaveRegradedScore}
+                disabled={isSaving}
+                className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95 disabled:opacity-75 ${
+                  isSaveSuccessful
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    : hasUnsavedChanges
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md ring-2 ring-blue-400 ring-offset-1'
+                    : 'bg-slate-900 hover:bg-slate-800 text-amber-300'
+                }`}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang lưu...</span>
+                  </>
+                ) : isSaveSuccessful ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-200" />
+                    <span>Đã lưu thành công!</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Lưu cập nhật điểm cho hs</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

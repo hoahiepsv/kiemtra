@@ -22,15 +22,15 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   if (!isOpen) return null;
 
   // Extract unique classes
-  const classes = Array.from(new Set(submissions.map((s) => s.className).filter(Boolean)));
+  const classes = Array.from(new Set(submissions.map((s) => String(s.className || '').trim()).filter(Boolean)));
 
   // Filter & Sort: Score descending, duration ascending
   const filtered = submissions
     .filter((s) => {
-      if (selectedClass !== 'all' && s.className.toLowerCase() !== selectedClass.toLowerCase()) {
+      if (selectedClass !== 'all' && String(s.className || '').toLowerCase().trim() !== String(selectedClass || '').toLowerCase().trim()) {
         return false;
       }
-      if (searchTerm && !matchSearchQuery(s.studentName, searchTerm)) {
+      if (searchTerm && !matchSearchQuery(String(s.studentName || ''), searchTerm)) {
         return false;
       }
       return true;
@@ -143,7 +143,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             <div className="space-y-2">
               {filtered.map((item, index) => {
                 const rank = index + 1;
-                const isCurrent = currentStudentName && item.studentName.toLowerCase() === currentStudentName.toLowerCase();
+                const isCurrent = currentStudentName && String(item.studentName || '').toLowerCase().trim() === String(currentStudentName || '').toLowerCase().trim();
 
                 let medalBadge = null;
                 if (rank === 1) medalBadge = <span className="text-base">🥇</span>;
