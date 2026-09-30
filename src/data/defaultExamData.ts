@@ -6,8 +6,8 @@ export const DEFAULT_EXAM_CONFIG: ExamConfig = {
   subject: 'TIN HỌC 6',
   durationMinutes: 15,
   copyrightText: 'Lê Hoà Hiệp - 0983.676.470',
-  data1Url: 'https://script.google.com/macros/s/AKfycbz9zQcN3CuaLsjyHEQeNiR5vJv_gfWhwBKDFL35k-q5VVQQwr0yBqBPCbyE1OF1A86jsw/exec',
-  data2Url: 'https://script.google.com/macros/s/AKfycbzS107icL7jGKWU8gZFzC87WeJCRkBYxmTnqJNAwu63Vm1QZomRjn2P2JczWS5OguLn/exec',
+  data1Url: 'https://script.google.com/macros/s/AKfycbxdxVRbNGgLoTtofRU9BeB8NLxQyU3z2dAmiGndNwOjJ8T9NzioN0VsVTaipKwg8KBOpw/exec',
+  data2Url: 'https://script.google.com/macros/s/AKfycbzNodWtP-Y8mIC1ZFkH9iNCH7mhZYmUXDrlNL4-haoZ8OwUOBfMcYWmJwmDR_EHUPis/exec',
 };
 
 export const DEFAULT_QUESTIONS: Question[] = [];
