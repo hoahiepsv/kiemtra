@@ -852,6 +852,10 @@ export default function App() {
           config={config}
           questions={questions}
           isTeacherMode={!!adminSession}
+          submissionsList={historyList}
+          onSelectSubmission={(sub) => {
+            setPreviewSubmission(sub);
+          }}
           onUpdateSubmission={async (updated) => {
             if (previewSubmission) {
               setPreviewSubmission(updated);
