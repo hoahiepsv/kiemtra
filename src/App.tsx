@@ -16,6 +16,7 @@ import { AppsScriptModal } from './components/AppsScriptModal';
 import { PdfReportModal } from './components/PdfReportModal';
 import { AdminAuthModal } from './components/AdminAuthModal';
 import { AdminMenuModal } from './components/AdminMenuModal';
+import { ViolationWarningModal } from './components/ViolationWarningModal';
 import { StudentReportExportModal } from './components/StudentReportExportModal';
 import { ClassExcelExportModal } from './components/ClassExcelExportModal';
 import { ExamEditorModal } from './components/ExamEditorModal';
@@ -134,9 +135,24 @@ export default function App() {
   const [showClassExcelModal, setShowClassExcelModal] = useState(false);
   const [showExamEditorModal, setShowExamEditorModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showViolationWarningModal, setShowViolationWarningModal] = useState(false);
   const [historyList, setHistoryList] = useState<SubmissionRecord[]>(() => getSubmissionHistory());
   const [isSyncingHistory, setIsSyncingHistory] = useState(false);
   const [previewSubmission, setPreviewSubmission] = useState<SubmissionRecord | null>(null);
+
+  // Tự động tải danh sách bài thi từ Google Sheets data2 khi khởi động ứng dụng
+  useEffect(() => {
+    if (config.data2Url && config.data2Url.trim()) {
+      fetchSubmissionsFromData2(config.data2Url)
+        .then((sheetData) => {
+          if (sheetData && sheetData.length > 0) {
+            const updated = syncSubmissionsFromSheetToHistory(sheetData);
+            setHistoryList(updated);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [config.data2Url]);
 
   const handleAuthorClick = () => {
     setShowAdminAuthModal(true);
@@ -787,6 +803,7 @@ export default function App() {
         isOpen={showAdminMenuModal}
         onClose={() => setShowAdminMenuModal(false)}
         session={adminSession}
+        history={historyList}
         onSelectAppsScript={() => {
           if (adminSession?.permissions?.canManageAppsScript) {
             setShowAppsScriptModal(true);
@@ -796,6 +813,7 @@ export default function App() {
         onSelectExportExcel={() => setShowClassExcelModal(true)}
         onSelectExamEditor={() => setShowExamEditorModal(true)}
         onSelectHistory={() => setShowHistoryModal(true)}
+        onSelectViolationWarning={() => setShowViolationWarningModal(true)}
       />
 
       {/* MODAL 1: Apps Script Generator & Config */}
@@ -822,6 +840,7 @@ export default function App() {
         history={historyList}
         isSyncing={isSyncingHistory}
         onRefreshFromSheet={handleSyncHistoryFromSheet}
+        onOpenViolations={() => setShowViolationWarningModal(true)}
         onSelectSubmission={(sub) => {
           setPreviewSubmission(sub);
           setShowPdfModal(true);
@@ -829,6 +848,19 @@ export default function App() {
         onDeleteSubmission={(sub) => {
           const updated = deleteSubmissionFromHistory(sub.studentName, sub.className, sub.endTime);
           setHistoryList(updated);
+        }}
+      />
+
+      {/* MODAL 1.75: Violation Warning (Duplicate IP Detection) */}
+      <ViolationWarningModal
+        isOpen={showViolationWarningModal}
+        onClose={() => setShowViolationWarningModal(false)}
+        history={historyList}
+        isSyncing={isSyncingHistory}
+        onRefreshFromSheet={handleSyncHistoryFromSheet}
+        onSelectSubmission={(sub) => {
+          setPreviewSubmission(sub);
+          setShowPdfModal(true);
         }}
       />
 
