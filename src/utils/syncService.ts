@@ -239,11 +239,18 @@ export function removeUnsyncedSubmission(timestamp: number): void {
   }
 }
 
+export interface SendSubmissionOptions {
+  isUpdate?: boolean;
+  targetOrderNumber?: number;
+  questionScore?: number;
+  isCorrect?: boolean;
+}
+
 // 4. Gửi kết quả lên Google Sheets (data2)
 export async function sendSubmissionToData2(
   data2Url: string,
   record: SubmissionRecord,
-  options?: { isUpdate?: boolean }
+  options?: SendSubmissionOptions
 ): Promise<{ success: boolean; message: string }> {
   const normalizedUrl = normalizeAppsScriptUrl(data2Url);
   if (!normalizedUrl) {
@@ -254,6 +261,17 @@ export async function sendSubmissionToData2(
   }
 
   const isUpdate = options?.isUpdate === true;
+
+  // Lập bản đồ điểm từng câu để gửi sang datasheet
+  const questionScores: Record<string, number> = {};
+  if (record.questionResults && Array.isArray(record.questionResults)) {
+    record.questionResults.forEach((q) => {
+      questionScores[String(q.orderNumber)] = q.earnedPoints;
+    });
+  }
+  if (options?.targetOrderNumber !== undefined && options.questionScore !== undefined) {
+    questionScores[String(options.targetOrderNumber)] = options.questionScore;
+  }
 
   // Xây dựng URL kèm tham số truy vấn: Đảm bảo dù Google Apps Script đọc e.parameter hay e.postData đều nhận diện chuẩn lệnh sửa điểm
   let targetUrl = normalizedUrl;
@@ -268,6 +286,11 @@ export async function sendSubmissionToData2(
       urlObj.searchParams.set('scoreString', record.scoreString || '');
       if (record.stt) {
         urlObj.searchParams.set('stt', String(record.stt));
+      }
+      if (options?.targetOrderNumber !== undefined) {
+        urlObj.searchParams.set('targetOrderNumber', String(options.targetOrderNumber));
+        urlObj.searchParams.set('questionScore', String(options.questionScore ?? 0));
+        urlObj.searchParams.set('isCorrect', String(options.isCorrect ?? false));
       }
     }
     targetUrl = urlObj.toString();
@@ -287,6 +310,10 @@ export async function sendSubmissionToData2(
     endTime: record.endTime,
     totalDuration: record.totalDuration,
     timestamp: record.timestamp,
+    targetOrderNumber: options?.targetOrderNumber,
+    questionScore: options?.questionScore,
+    isCorrect: options?.isCorrect,
+    questionScores: questionScores,
     ip: record.ipAddress || '',
     ipAddress: record.ipAddress || '',
     ipHocSinh: record.ipAddress || '',
@@ -332,8 +359,23 @@ export async function fetchQuestionsFromData1(data1Url: string): Promise<{
 } | null> {
   const normalizedUrl = normalizeAppsScriptUrl(data1Url);
   if (!normalizedUrl) return null;
+
+  let targetUrl = normalizedUrl;
   try {
-    const res = await fetch(normalizedUrl);
+    const u = new URL(normalizedUrl);
+    if (!u.searchParams.has('action')) {
+      u.searchParams.set('action', 'getQuestions');
+    }
+    if (!u.searchParams.has('sheet')) {
+      u.searchParams.set('sheet', 'data1');
+    }
+    targetUrl = u.toString();
+  } catch {
+    targetUrl = normalizedUrl;
+  }
+
+  try {
+    const res = await fetch(targetUrl);
     if (!res.ok) return null;
     const json = await res.json();
     if (json.status === 'success' && Array.isArray(json.questions)) {
@@ -454,8 +496,23 @@ export async function saveExamToData1(
 // 6. Tải bảng xếp hạng và danh sách nộp bài từ Google Sheets data2
 export async function fetchSubmissionsFromData2(data2Url: string): Promise<SubmissionRecord[]> {
   if (!data2Url || !data2Url.trim()) return [];
+
+  let targetUrl = data2Url.trim();
   try {
-    const res = await fetch(data2Url.trim());
+    const u = new URL(targetUrl);
+    if (!u.searchParams.has('action')) {
+      u.searchParams.set('action', 'getSubmissions');
+    }
+    if (!u.searchParams.has('sheet')) {
+      u.searchParams.set('sheet', 'data2');
+    }
+    targetUrl = u.toString();
+  } catch {
+    targetUrl = data2Url.trim();
+  }
+
+  try {
+    const res = await fetch(targetUrl);
     if (!res.ok) return [];
     const json = await res.json();
     if (json.status === 'success' && Array.isArray(json.data)) {
