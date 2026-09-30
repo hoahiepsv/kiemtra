@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, X, Save, CheckCircle2, Loader2 } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import { formatExamDateTime, formatExamDuration, formatVietnameseFullDate } from '../utils/dateUtils';
 import { parseScoreStringDetailed } from '../utils/scoreStringUtils';
@@ -561,69 +561,6 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
                 );
               })}
             </div>
-
-            {/* Nút lưu phía dưới phần tự luận cho giáo viên */}
-            {isTeacherMode && !isExportingImage && onSaveRegradedScore && (
-              <div className="mt-3.5 p-3.5 bg-gradient-to-r from-amber-50 via-orange-50/50 to-amber-50 border-2 border-dashed border-amber-300 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 hide-on-export print:hidden shadow-xs">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700 flex-shrink-0 shadow-2xs">
-                    <Save className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
-                      <span>Cập nhật kết quả chấm bài của học sinh</span>
-                      {hasUnsavedChanges && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-400">
-                          Chưa lưu thay đổi
-                        </span>
-                      )}
-                      {isSaveSuccessful && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                          ✓ Đã lưu vào hệ thống
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
-                      Tổng điểm sau khi chấm: <strong className="text-red-600 font-extrabold text-sm">{String(submission.totalScore).replace('.', ',')} đ</strong>. Bấm nút bên cạnh để cập nhật điểm mới cho học sinh.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSaveRegradedScore();
-                  }}
-                  disabled={isSaving}
-                  className={`w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm active:scale-95 disabled:opacity-75 ${
-                    isSaveSuccessful
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      : hasUnsavedChanges
-                      ? 'bg-amber-600 hover:bg-amber-700 text-white ring-2 ring-amber-400 ring-offset-1 animate-pulse'
-                      : 'bg-slate-900 hover:bg-slate-800 text-amber-300'
-                  }`}
-                  title="Nhấn để lưu lại điểm đã chấm cho học sinh"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Đang lưu điểm...</span>
-                    </>
-                  ) : isSaveSuccessful ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                      <span>Đã lưu điểm thành công!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      <span>Lưu cập nhật điểm cho hs</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
           </div>
         )}
 

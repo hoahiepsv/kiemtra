@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   FolderArchive,
@@ -18,6 +18,8 @@ import {
   Trash2,
   Save,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import {
@@ -196,6 +198,44 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
 
   // Unique classes for filter
   const classOptions = Array.from(new Set(students.map((s) => String(s.className || '').trim()))).filter(Boolean);
+
+  // Vị trí học sinh xem trước để chuyển tới lui
+  const previewIndex = useMemo(() => {
+    if (!previewStudent || filteredStudents.length === 0) return -1;
+    return filteredStudents.findIndex((s) => getStudentKey(s) === getStudentKey(previewStudent));
+  }, [previewStudent, filteredStudents]);
+
+  const hasPrevPreview = previewIndex > 0;
+  const hasNextPreview = previewIndex !== -1 && previewIndex < filteredStudents.length - 1;
+  const prevPreviewStudent = hasPrevPreview ? filteredStudents[previewIndex - 1] : null;
+  const nextPreviewStudent = hasNextPreview ? filteredStudents[previewIndex + 1] : null;
+
+  const navigatePreview = (target: SubmissionRecord | null) => {
+    if (!target) return;
+    if (previewHasUnsavedChanges) {
+      handleSavePreviewStudent();
+    }
+    setPreviewStudent(target);
+    setPreviewHasUnsavedChanges(false);
+    setPreviewSaveSuccess(false);
+  };
+
+  // Hỗ trợ phím mũi tên khi xem trước
+  useEffect(() => {
+    if (!previewStudent) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'ArrowLeft' && hasPrevPreview && prevPreviewStudent) {
+        e.preventDefault();
+        navigatePreview(prevPreviewStudent);
+      } else if (e.key === 'ArrowRight' && hasNextPreview && nextPreviewStudent) {
+        e.preventDefault();
+        navigatePreview(nextPreviewStudent);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewStudent, hasPrevPreview, hasNextPreview, prevPreviewStudent, nextPreviewStudent, previewHasUnsavedChanges]);
 
   // Toggle selection
   const handleToggleSelect = (key: string) => {
@@ -711,12 +751,84 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
       {/* Single Student Preview Modal */}
       {previewStudent && (
         <div className="fixed inset-0 z-60 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-4">
+          {/* Nút mũi tên TRÁI - Học sinh trước (bên trái) */}
+          {filteredStudents.length > 1 && (
+            <button
+              type="button"
+              onClick={() => navigatePreview(prevPreviewStudent)}
+              disabled={!hasPrevPreview}
+              aria-label="Học sinh trước"
+              className={`fixed left-2 sm:left-4 md:left-6 top-1/2 -translate-y-1/2 z-70 w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-emerald-600 shadow-2xl border-2 border-slate-200/80 transition-all flex items-center justify-center ${
+                !hasPrevPreview
+                  ? 'opacity-25 cursor-not-allowed pointer-events-none'
+                  : 'cursor-pointer hover:scale-110 active:scale-95 hover:border-emerald-400'
+              }`}
+              title={
+                prevPreviewStudent
+                  ? `Học sinh trước: ${prevPreviewStudent.studentName} (${prevPreviewStudent.className}) - Phím ←`
+                  : 'Không có học sinh trước'
+              }
+            >
+              <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8 stroke-[2.5]" />
+            </button>
+          )}
+
+          {/* Nút mũi tên PHẢI - Học sinh kế tiếp (bên phải) */}
+          {filteredStudents.length > 1 && (
+            <button
+              type="button"
+              onClick={() => navigatePreview(nextPreviewStudent)}
+              disabled={!hasNextPreview}
+              aria-label="Học sinh kế tiếp"
+              className={`fixed right-2 sm:right-4 md:right-6 top-1/2 -translate-y-1/2 z-70 w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-emerald-600 shadow-2xl border-2 border-slate-200/80 transition-all flex items-center justify-center ${
+                !hasNextPreview
+                  ? 'opacity-25 cursor-not-allowed pointer-events-none'
+                  : 'cursor-pointer hover:scale-110 active:scale-95 hover:border-emerald-400'
+              }`}
+              title={
+                nextPreviewStudent
+                  ? `Học sinh kế tiếp: ${nextPreviewStudent.studentName} (${nextPreviewStudent.className}) - Phím →`
+                  : 'Không có học sinh sau'
+              }
+            >
+              <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8 stroke-[2.5]" />
+            </button>
+          )}
+
           <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="px-5 py-3 bg-slate-800 text-white flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-xs font-semibold truncate">
                 <Eye className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                 <span className="truncate">Xem trước ảnh phiếu báo cáo: {previewStudent.studentName} ({previewStudent.className})</span>
               </div>
+
+              {/* Thanh chuyển nhanh học sinh trên Header */}
+              {filteredStudents.length > 1 && previewIndex !== -1 && (
+                <div className="flex items-center gap-1.5 bg-slate-700/80 px-2.5 py-1 rounded-lg border border-slate-600 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => navigatePreview(prevPreviewStudent)}
+                    disabled={!hasPrevPreview}
+                    className="p-1 rounded-md hover:bg-slate-600 text-slate-300 hover:text-white disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                    title="Học sinh trước (Phím ←)"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="font-semibold text-slate-200 text-[11px] px-1 select-none">
+                    HS <strong className="text-white font-bold">{previewIndex + 1}</strong>/{filteredStudents.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => navigatePreview(nextPreviewStudent)}
+                    disabled={!hasNextPreview}
+                    className="p-1 rounded-md hover:bg-slate-600 text-slate-300 hover:text-white disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                    title="Học sinh kế tiếp (Phím →)"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                 <label className="flex items-center gap-1.5 text-xs text-amber-200 cursor-pointer bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg border border-slate-600 transition-colors select-none">
                   <input
@@ -760,12 +872,39 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
             </div>
 
             <div className="p-3 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
-              <button
-                onClick={() => setPreviewStudent(null)}
-                className="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 cursor-pointer"
-              >
-                Đóng xem trước
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPreviewStudent(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Đóng xem trước
+                </button>
+
+                {filteredStudents.length > 1 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => navigatePreview(prevPreviewStudent)}
+                      disabled={!hasPrevPreview}
+                      className="px-2.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer flex items-center gap-1"
+                      title="Học sinh trước (Phím ←)"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span>Trước</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigatePreview(nextPreviewStudent)}
+                      disabled={!hasNextPreview}
+                      className="px-2.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer flex items-center gap-1"
+                      title="Học sinh sau (Phím →)"
+                    >
+                      <span>Sau</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div className="flex items-center gap-2">
                 <button
