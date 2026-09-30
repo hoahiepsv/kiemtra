@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Play, Clock, BookOpen, School, AlertCircle, Sparkles, RotateCcw, CheckCircle2, Globe } from 'lucide-react';
 import { ExamConfig, DraftExam, Question } from '../types';
 import { fetchClientIp } from '../utils/ipService';
+import { formatStudentName, formatClassName } from '../utils/studentFormatting';
 
 interface StudentStartFormProps {
   config: ExamConfig;
@@ -61,11 +62,14 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentName.trim()) {
+    const cleanName = formatStudentName(studentName);
+    const cleanClass = formatClassName(className);
+
+    if (!cleanName) {
       setErrorMessage('Vui lòng nhập đầy đủ Họ và Tên của học sinh!');
       return;
     }
-    if (!className.trim()) {
+    if (!cleanClass) {
       setErrorMessage('Vui lòng nhập Lớp của học sinh!');
       return;
     }
@@ -73,8 +77,10 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
       setErrorMessage('Đề thi hiện chưa có câu hỏi. Giáo viên vui lòng vào mục Quản trị để đồng bộ đề thi từ Google Sheets (data1) hoặc tạo câu hỏi!');
       return;
     }
+    setStudentName(cleanName);
+    setClassName(cleanClass);
     setErrorMessage('');
-    onStartExam(studentName.trim(), className.trim());
+    onStartExam(cleanName, cleanClass);
   };
 
   return (
@@ -206,6 +212,11 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
                 type="text"
                 value={studentName}
                 onChange={(e) => setStudentName(e.target.value)}
+                onBlur={() => {
+                  if (studentName.trim()) {
+                    setStudentName(formatStudentName(studentName));
+                  }
+                }}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-sm font-medium transition-all bg-white"
                 autoFocus
               />
@@ -219,7 +230,12 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
                 id="student-class"
                 type="text"
                 value={className}
-                onChange={(e) => setClassName(e.target.value)}
+                onChange={(e) => setClassName(e.target.value.toUpperCase())}
+                onBlur={() => {
+                  if (className.trim()) {
+                    setClassName(formatClassName(className));
+                  }
+                }}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-sm font-medium transition-all bg-white uppercase"
               />
             </div>

@@ -16,6 +16,12 @@ import { SubmissionRecord, ExamConfig, Question } from '../types';
 import { VietnameseExamPaper, ExamPaperTheme } from './VietnameseExamPaper';
 import { overrideEssayGrade } from '../utils/gradeService';
 
+export interface RegradeMeta {
+  targetOrderNumber?: number;
+  questionScore?: number;
+  isCorrect?: boolean;
+}
+
 interface PdfReportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -23,7 +29,7 @@ interface PdfReportModalProps {
   config: ExamConfig;
   questions?: Question[];
   isTeacherMode?: boolean;
-  onUpdateSubmission?: (updated: SubmissionRecord) => void;
+  onUpdateSubmission?: (updated: SubmissionRecord, meta?: RegradeMeta) => Promise<void> | void;
   submissionsList?: SubmissionRecord[];
   onSelectSubmission?: (sub: SubmissionRecord) => void;
 }
@@ -115,24 +121,52 @@ export const PdfReportModal: React.FC<PdfReportModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleToggleEssayCorrect = (orderNumber: number, isCorrect: boolean) => {
+  const handleToggleEssayCorrect = async (orderNumber: number, isCorrect: boolean) => {
     const updated = overrideEssayGrade(currentSubmission, questions, orderNumber, isCorrect);
     setCurrentSubmission(updated);
-    setHasUnsavedChanges(true);
-    setIsSaveSuccessful(false);
+
+    // Tính điểm của câu vừa xác nhận
+    const qResult = updated.questionResults?.find((q) => q.orderNumber === orderNumber);
+    const newScore = qResult !== undefined ? qResult.earnedPoints : (isCorrect ? 1 : 0);
+
     setRegradeNotice(
-      `Đã chuyển câu ${orderNumber} thành ${isCorrect ? 'ĐÚNG' : 'SAI'} (Điểm mới: ${String(updated.totalScore).replace('.', ',')} đ). Bấm 'Lưu cập nhật điểm cho hs' để xác nhận!`
+      `Đang cập nhật câu ${orderNumber} (${String(newScore).replace('.', ',')} đ) vào datasheet...`
     );
+
+    try {
+      if (onUpdateSubmission) {
+        await onUpdateSubmission(updated, {
+          targetOrderNumber: orderNumber,
+          questionScore: newScore,
+          isCorrect: isCorrect,
+        });
+      }
+      setHasUnsavedChanges(false);
+      setIsSaveSuccessful(true);
+      setRegradeNotice(
+        `✓ Đã cập nhật câu ${orderNumber} (${isCorrect ? 'ĐÚNG' : 'SAI'}: ${String(newScore).replace('.', ',')} đ) vào datasheet! Tổng điểm: ${String(updated.totalScore).replace('.', ',')} đ.`
+      );
+      setTimeout(() => {
+        setIsSaveSuccessful(false);
+      }, 4000);
+    } catch (err) {
+      console.error('Lỗi khi cập nhật datasheet:', err);
+      setRegradeNotice(
+        `Đã đổi câu ${orderNumber} thành ${isCorrect ? 'ĐÚNG' : 'SAI'} (Đã lưu máy, đang thử gửi lại datasheet).`
+      );
+    }
   };
 
   const handleSaveRegradedScore = async () => {
     setIsSaving(true);
     try {
-      onUpdateSubmission?.(currentSubmission);
+      if (onUpdateSubmission) {
+        await onUpdateSubmission(currentSubmission);
+      }
       setHasUnsavedChanges(false);
       setIsSaveSuccessful(true);
       setRegradeNotice(
-        `✓ Đã lưu cập nhật điểm thành công cho học sinh ${currentSubmission.studentName} (${String(currentSubmission.totalScore).replace('.', ',')} đ)!`
+        `✓ Đã cập nhật toàn bộ kết quả học sinh ${currentSubmission.studentName} (${String(currentSubmission.totalScore).replace('.', ',')} đ) vào datasheet!`
       );
       setTimeout(() => {
         setIsSaveSuccessful(false);

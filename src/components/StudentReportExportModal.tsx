@@ -857,11 +857,25 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                   questions={questions}
                   showCorrectAnswers={includeCorrectAnswers}
                   isTeacherMode={true}
-                  onToggleEssayCorrect={(orderNumber, isCorrect) => {
+                  onToggleEssayCorrect={async (orderNumber, isCorrect) => {
                     const updated = overrideEssayGrade(previewStudent, questions, orderNumber, isCorrect);
                     setPreviewStudent(updated);
-                    setPreviewHasUnsavedChanges(true);
-                    setPreviewSaveSuccess(false);
+                    const qResult = updated.questionResults?.find((q) => q.orderNumber === orderNumber);
+                    const newScore = qResult !== undefined ? qResult.earnedPoints : (isCorrect ? 1 : 0);
+
+                    const updatedList = updateSubmissionInHistory(updated);
+                    setStudents(updatedList);
+                    if (config.data2Url) {
+                      await sendSubmissionToData2(config.data2Url, updated, {
+                        isUpdate: true,
+                        targetOrderNumber: orderNumber,
+                        questionScore: newScore,
+                        isCorrect: isCorrect,
+                      });
+                    }
+                    setPreviewHasUnsavedChanges(false);
+                    setPreviewSaveSuccess(true);
+                    setTimeout(() => setPreviewSaveSuccess(false), 3500);
                   }}
                   onSaveRegradedScore={handleSavePreviewStudent}
                   hasUnsavedChanges={previewHasUnsavedChanges}

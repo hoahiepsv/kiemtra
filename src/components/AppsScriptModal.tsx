@@ -30,7 +30,7 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
   onSaveConfig,
   onReloadFromData1,
 }) => {
-  const [activeTab, setActiveTab] = useState<'data1' | 'data2' | 'urls' | 'combined'>('data1');
+  const [activeTab, setActiveTab] = useState<'combined' | 'data1' | 'data2' | 'urls'>('combined');
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
 
   // Local inputs for URLs
@@ -125,6 +125,17 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
         {/* Tab Selection */}
         <div className="bg-sky-50/70 border-b border-sky-100 px-6 py-2 flex flex-wrap gap-2 text-xs">
           <button
+            onClick={() => setActiveTab('combined')}
+            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+              activeTab === 'combined'
+                ? 'bg-sky-600 text-white shadow-xs'
+                : 'bg-white text-slate-700 hover:bg-sky-100/70 border border-slate-200'
+            }`}
+          >
+            ★ 1. Mã Gộp Cả 2 Sheet Data1 &amp; Data2 (Khuyên Dùng)
+          </button>
+
+          <button
             onClick={() => setActiveTab('data1')}
             className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
               activeTab === 'data1'
@@ -132,7 +143,7 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
                 : 'bg-white text-slate-700 hover:bg-sky-100/70 border border-slate-200'
             }`}
           >
-            1. Mã cho Sheet Data1 (Đề thi)
+            2. Mã riêng Sheet Data1 (Đề thi)
           </button>
 
           <button
@@ -143,18 +154,7 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
                 : 'bg-white text-slate-700 hover:bg-sky-100/70 border border-slate-200'
             }`}
           >
-            2. Mã cho Sheet Data2 (Lưu kết quả)
-          </button>
-
-          <button
-            onClick={() => setActiveTab('combined')}
-            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-              activeTab === 'combined'
-                ? 'bg-sky-600 text-white shadow-xs'
-                : 'bg-white text-slate-700 hover:bg-sky-100/70 border border-slate-200'
-            }`}
-          >
-            3. Mã gộp All-in-One (Cả 2 sheet)
+            3. Mã riêng Sheet Data2 (Kết quả &amp; Datasheet)
           </button>
 
           <button
@@ -165,7 +165,7 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
                 : 'bg-white text-slate-700 hover:bg-sky-100/70 border border-slate-200'
             }`}
           >
-            4. Nhập Link Web App & Cấu hình
+            4. Nhập Link Web App &amp; Kiểm tra kết nối
           </button>
         </div>
 
