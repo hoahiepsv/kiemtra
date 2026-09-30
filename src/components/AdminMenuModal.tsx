@@ -1,31 +1,45 @@
-import React from 'react';
-import { X, FileCode2, FileSpreadsheet, ArrowRight, ShieldCheck, FolderArchive, FileEdit, Lock, History } from 'lucide-react';
-import { AdminAuthSession } from '../types';
+import React, { useMemo } from 'react';
+import { X, FileCode2, FileSpreadsheet, ArrowRight, ShieldCheck, FolderArchive, FileEdit, Lock, History, ShieldAlert } from 'lucide-react';
+import { AdminAuthSession, SubmissionRecord } from '../types';
+import { detectIpViolations } from '../utils/ipViolationService';
 
 interface AdminMenuModalProps {
   isOpen: boolean;
   onClose: () => void;
   session?: AdminAuthSession | null;
+  history?: SubmissionRecord[];
   onSelectAppsScript: () => void;
   onSelectExportImage: () => void;
   onSelectExportExcel: () => void;
   onSelectExamEditor: () => void;
   onSelectHistory: () => void;
+  onSelectViolationWarning?: () => void;
 }
 
 export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
   isOpen,
   onClose,
   session,
+  history = [],
   onSelectAppsScript,
   onSelectExportImage,
   onSelectExportExcel,
   onSelectExamEditor,
   onSelectHistory,
+  onSelectViolationWarning,
 }) => {
   if (!isOpen) return null;
 
   const canManageAppsScript = session ? session.permissions.canManageAppsScript : true;
+
+  // Calculate duplicate IP stats using robust algorithm
+  const violatingGroups = useMemo(() => detectIpViolations(history || []), [history]);
+  const violatingIpStats = useMemo(() => {
+    return {
+      count: violatingGroups.length,
+      totalSubmissions: violatingGroups.reduce((acc, g) => acc + g.submissionCount, 0),
+    };
+  }, [violatingGroups]);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -164,7 +178,44 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
             </div>
           </button>
 
-          {/* Option 5: Tạo Apps Script (Conditional) */}
+          {/* Option 5: Cảnh báo vi phạm (Nghi vấn trùng lặp IP) */}
+          <button
+            onClick={() => {
+              onClose();
+              onSelectViolationWarning?.();
+            }}
+            className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-rose-200 hover:border-rose-500 bg-rose-50/50 hover:bg-rose-50/90 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-rose-600/20 group-hover:scale-105 transition-transform">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-rose-700 transition-colors">
+                    5. Cảnh báo vi phạm (Trùng lặp IP)
+                  </h4>
+                  {violatingIpStats.count > 0 ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white shadow-xs animate-pulse">
+                      {violatingIpStats.count} IP làm trên 1 lần
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-300">
+                      An toàn (0 vi phạm)
+                    </span>
+                  )}
+                </div>
+                <span className="text-rose-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
+                  <ArrowRight className="w-4 h-4" />
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
+                Kiểm duyệt và cho biết máy tính / địa chỉ IP đã làm bài từ 2 lần trở lên: liệt kê rõ IP đó đã làm cho những tên học sinh nào, lớp nào, số điểm từng lần làm bài.
+              </p>
+            </div>
+          </button>
+
+          {/* Option 6: Tạo Apps Script (Conditional) */}
           {canManageAppsScript ? (
             <button
               onClick={() => {
@@ -179,7 +230,7 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-sky-700 transition-colors">
-                    5. Tạo Apps Script...
+                    6. Tạo Apps Script...
                   </h4>
                   <span className="text-sky-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
                     <ArrowRight className="w-4 h-4" />
@@ -198,7 +249,7 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="text-base font-bold text-slate-500">
-                    5. Cấu hình Google Sheets & Apps Script
+                    6. Cấu hình Google Sheets & Apps Script
                   </h4>
                   <span className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-0.5 rounded-full">
                     Chỉ dành cho Cấp cao

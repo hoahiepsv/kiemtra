@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { History, X, Trash2, Calendar, Clock, Eye, RefreshCw, FileSpreadsheet, FileText, CheckCircle2, Search } from 'lucide-react';
+import { History, X, Trash2, Calendar, Clock, Eye, RefreshCw, FileSpreadsheet, FileText, CheckCircle2, Search, ShieldAlert } from 'lucide-react';
 import { SubmissionRecord } from '../types';
 import { matchSearchQuery } from '../utils/gradeService';
 
@@ -11,6 +11,7 @@ interface HistoryModalProps {
   onClearHistory?: () => void;
   onDeleteSubmission?: (submission: SubmissionRecord) => void;
   onRefreshFromSheet?: () => Promise<void>;
+  onOpenViolations?: () => void;
   isSyncing?: boolean;
 }
 
@@ -22,10 +23,27 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   onClearHistory,
   onDeleteSubmission,
   onRefreshFromSheet,
+  onOpenViolations,
   isSyncing = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingRecord, setDeletingRecord] = useState<SubmissionRecord | null>(null);
+
+  // Count duplicate IPs
+  const duplicateIpCount = useMemo(() => {
+    const map = new Map<string, number>();
+    (history || []).forEach((r) => {
+      const ip = (r.ipAddress || '').trim();
+      if (ip && ip !== 'Chưa ghi nhận' && ip !== '-' && ip !== 'N/A') {
+        map.set(ip, (map.get(ip) || 0) + 1);
+      }
+    });
+    let count = 0;
+    map.forEach((c) => {
+      if (c > 1) count++;
+    });
+    return count;
+  }, [history]);
 
   const filteredHistory = useMemo(() => {
     if (!searchTerm.trim()) return history;
@@ -86,13 +104,23 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
         {/* Sub-bar info & Search */}
         <div className="bg-slate-50 px-6 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between text-xs text-slate-600 gap-2 flex-shrink-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span>Tổng số bài nộp: <strong className="text-slate-900">{history.length}</strong> bài</span>
             {history.length > 0 && (
               <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px] font-semibold flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                Đã đồng bộ từ Cơ sở dữ liệu
+                Đã đồng bộ từ CSDL
               </span>
+            )}
+            {duplicateIpCount > 0 && onOpenViolations && (
+              <button
+                onClick={onOpenViolations}
+                className="text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-0.5 rounded-md border border-rose-300 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors animate-pulse"
+                title="Bấm để xem danh sách IP làm bài trên 1 lần"
+              >
+                <ShieldAlert className="w-3 h-3 text-rose-600" />
+                <span>Cảnh báo: {duplicateIpCount} IP trùng</span>
+              </button>
             )}
           </div>
           {history.length > 0 && (
