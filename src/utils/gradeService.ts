@@ -1,3 +1,6 @@
+import { SubmissionRecord, Question } from '../types';
+import { parseScoreStringDetailed, buildScoreString } from './scoreStringUtils';
+
 /**
  * Dịch vụ chấm điểm & So khớp đáp án
  * Hỗ trợ so khớp tự luận:
@@ -10,9 +13,10 @@
 /**
  * Loại bỏ dấu tiếng Việt, chuyển đ/Đ thành d
  */
-export function removeVietnameseAccents(str: string): string {
-  if (!str) return '';
-  return str
+export function removeVietnameseAccents(str: any): string {
+  if (str === undefined || str === null) return '';
+  const s = String(str);
+  return s
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/đ/g, 'd')
@@ -26,8 +30,8 @@ export function removeVietnameseAccents(str: string): string {
  * - Cắt khoảng trắng đầu cuối (trim)
  * - Gộp các khoảng trắng thừa ở giữa thành 1 dấu cách đơn
  */
-export function normalizeKeywords(str: string): string {
-  if (!str) return '';
+export function normalizeKeywords(str: any): string {
+  if (str === undefined || str === null) return '';
   return removeVietnameseAccents(str)
     .toLowerCase()
     .trim()
@@ -40,14 +44,16 @@ export function normalizeKeywords(str: string): string {
  * Ví dụ: "nguyen van a", "nguyenvana", "NGUYEN VAN A", "Nguyen   Van A", "van a", "a van" đều khớp với "Nguyễn Văn A".
  */
 export function matchSearchQuery(
-  target: string | undefined | null,
-  query: string | undefined | null
+  target: any,
+  query: any
 ): boolean {
-  if (!query || !query.trim()) return true;
-  if (!target || !target.trim()) return false;
+  const q = String(query || '').trim();
+  const t = String(target || '').trim();
+  if (!q) return true;
+  if (!t) return false;
 
-  const cleanTarget = removeVietnameseAccents(target).toLowerCase();
-  const cleanQuery = removeVietnameseAccents(query).toLowerCase();
+  const cleanTarget = removeVietnameseAccents(t).toLowerCase();
+  const cleanQuery = removeVietnameseAccents(q).toLowerCase();
 
   // 1. So khớp không khoảng cách (nguyenvana khớp với Nguyễn Văn A)
   const noSpaceTarget = cleanTarget.replace(/\s+/g, '');
@@ -190,4 +196,74 @@ export function checkEssayAnswerMatch(
 
   // Kiểm tra nếu học sinh gõ khớp với BẤT KỲ đáp án tương tự nào -> Đều chấm đúng!
   return acceptableOptions.some((opt) => checkSingleEssayMatch(rawStudent, opt));
+}
+
+/**
+ * Chấm lại câu tự luận cho học sinh theo quyền giáo viên (Đúng / Sai)
+ * @param submission Bản ghi nộp bài của học sinh
+ * @param questions Danh sách câu hỏi đề thi
+ * @param orderNumber Số thứ tự câu hỏi cần chấm lại
+ * @param isCorrect Giáo viên chọn Đúng (true) hoặc Sai (false)
+ * @returns Bản ghi SubmissionRecord mới đã được cập nhật điểm số và chuỗi scoreString
+ */
+export function overrideEssayGrade(
+  submission: SubmissionRecord,
+  questions: Question[],
+  orderNumber: number,
+  isCorrect: boolean
+): SubmissionRecord {
+  const parsed = parseScoreStringDetailed(submission.scoreString || '');
+
+  let newResults: { orderNumber: number; earnedPoints: number; studentAnswer: string }[] = [];
+
+  if (questions && questions.length > 0) {
+    newResults = questions.map((q, idx) => {
+      const order = q.orderNumber || idx + 1;
+      const matched = parsed.items.find((it) => it.orderNumber === order);
+      const studentAns = matched?.studentAnswer || '';
+
+      if (order === orderNumber) {
+        const fullPoints = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
+        const earned = isCorrect ? fullPoints : 0;
+        return {
+          orderNumber: order,
+          earnedPoints: earned,
+          studentAnswer: studentAns,
+        };
+      }
+
+      const earned = matched ? matched.earnedPoints : 0;
+      return {
+        orderNumber: order,
+        earnedPoints: earned,
+        studentAnswer: studentAns,
+      };
+    });
+  } else {
+    // Trường hợp không có danh sách câu hỏi đề thi
+    newResults = parsed.items.map((it) => {
+      if (it.orderNumber === orderNumber) {
+        return {
+          orderNumber: it.orderNumber,
+          earnedPoints: isCorrect ? (it.earnedPoints > 0 ? it.earnedPoints : 1) : 0,
+          studentAnswer: it.studentAnswer,
+        };
+      }
+      return {
+        orderNumber: it.orderNumber,
+        earnedPoints: it.earnedPoints,
+        studentAnswer: it.studentAnswer,
+      };
+    });
+  }
+
+  const rawTotal = newResults.reduce((acc, r) => acc + (Number(r.earnedPoints) || 0), 0);
+  const newTotalScore = Math.round(rawTotal * 100) / 100;
+  const newScoreString = buildScoreString(newResults);
+
+  return {
+    ...submission,
+    totalScore: newTotalScore,
+    scoreString: newScoreString,
+  };
 }

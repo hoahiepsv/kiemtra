@@ -92,10 +92,20 @@ export function syncSubmissionsFromSheetToHistory(sheetRecords: SubmissionRecord
     const list = Array.isArray(sheetRecords) ? [...sheetRecords] : [];
     // Sort newest first
     list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    // Khi đồng bộ từ Cơ sở dữ liệu, Cơ sở dữ liệu là nguồn dữ liệu chuẩn xác duy nhất!
-    // Ghi đè vào bộ nhớ đệm để dọn sạch các bản ghi thử nghiệm rác trên máy (như sda, wew, dsd...)
-    localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(list.slice(0, 300)));
-    return list;
+
+    // Lọc bỏ trùng lặp nếu trong Google Sheets trước đây đã bị ghi nhiều dòng cho 1 học sinh
+    const seen = new Set<string>();
+    const uniqueList: SubmissionRecord[] = [];
+    for (const item of list) {
+      const nameKey = `${String(item.studentName || '').toLowerCase().trim()}_${String(item.className || '').toLowerCase().trim()}`;
+      if (!seen.has(nameKey)) {
+        seen.add(nameKey);
+        uniqueList.push(item);
+      }
+    }
+
+    localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(uniqueList.slice(0, 300)));
+    return uniqueList;
   } catch (e) {
     console.error('Error syncing submissions from sheet to history:', e);
     return sheetRecords || [];
@@ -105,9 +115,12 @@ export function syncSubmissionsFromSheetToHistory(sheetRecords: SubmissionRecord
 export function deleteSubmissionFromHistory(studentName: string, className?: string, endTime?: string): SubmissionRecord[] {
   try {
     const existing = getSubmissionHistory();
+    const targetName = String(studentName || '').toLowerCase().trim();
+    const targetClass = String(className || '').toLowerCase().trim();
+
     const updated = existing.filter((item) => {
-      const matchName = item.studentName.toLowerCase().trim() === studentName.toLowerCase().trim();
-      const matchClass = !className || item.className.toLowerCase().trim() === className.toLowerCase().trim();
+      const matchName = String(item.studentName || '').toLowerCase().trim() === targetName;
+      const matchClass = !className || String(item.className || '').toLowerCase().trim() === targetClass;
       const matchTime = !endTime || item.endTime === endTime;
       return !(matchName && matchClass && matchTime);
     });
@@ -119,11 +132,78 @@ export function deleteSubmissionFromHistory(studentName: string, className?: str
   }
 }
 
+/**
+ * Cập nhật một bản ghi nộp bài trong lịch sử lưu trữ (dùng khi giáo viên chấm lại câu tự luận)
+ * Thay thế trực tiếp ô điểm của học sinh mà KHÔNG tạo thêm tên học sinh
+ */
+export function updateSubmissionInHistory(updatedRecord: SubmissionRecord): SubmissionRecord[] {
+  try {
+    const existing = getSubmissionHistory();
+    const updatedName = String(updatedRecord.studentName || '').toLowerCase().trim();
+    const updatedClass = String(updatedRecord.className || '').toLowerCase().trim();
+
+    // 1. Tìm vị trí của học sinh: Ưu tiên số 1 là Họ tên + Lớp (đặc trưng duy nhất của học sinh)
+    let foundIndex = existing.findIndex((item) => {
+      const matchName = String(item.studentName || '').toLowerCase().trim() === updatedName;
+      const matchClass = !updatedClass || String(item.className || '').toLowerCase().trim() === updatedClass;
+      return matchName && matchClass;
+    });
+
+    // 2. Nếu không tìm thấy bằng tên, mới tìm theo STT nếu có
+    if (foundIndex === -1 && updatedRecord.stt !== undefined && updatedRecord.stt !== null && Number(updatedRecord.stt) > 0) {
+      foundIndex = existing.findIndex((item) => Number(item.stt) === Number(updatedRecord.stt));
+    }
+
+    if (foundIndex !== -1) {
+      // Giữ nguyên STT ban đầu của học sinh
+      const originalSTT = existing[foundIndex].stt ?? updatedRecord.stt;
+      updatedRecord.stt = originalSTT;
+
+      // Thay thế trực tiếp ô điểm và kết quả của học sinh này
+      existing[foundIndex] = {
+        ...existing[foundIndex],
+        ...updatedRecord,
+        stt: originalSTT,
+        totalScore: updatedRecord.totalScore,
+        scoreString: updatedRecord.scoreString,
+        questionResults: updatedRecord.questionResults,
+      };
+
+      // Đồng thời dọn sạch bất kỳ bản ghi trùng lặp nào của học sinh này
+      const targetSTT = originalSTT;
+      const deduplicated = existing.filter((item, idx) => {
+        if (idx === foundIndex) return true;
+        const sameName = String(item.studentName || '').toLowerCase().trim() === updatedName;
+        const sameClass = !updatedClass || String(item.className || '').toLowerCase().trim() === updatedClass;
+        const sameSTT = targetSTT !== undefined && item.stt === targetSTT;
+        return !(sameSTT || (sameName && sameClass));
+      });
+
+      localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(deduplicated));
+      return deduplicated;
+    } else {
+      // Chỉ khi chưa từng có thì mới thêm vào
+      existing.unshift(updatedRecord);
+      localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(existing));
+      return existing;
+    }
+  } catch (e) {
+    console.error('Error updating submission in history:', e);
+    return getSubmissionHistory();
+  }
+}
+
 export function getSubmissionHistory(): SubmissionRecord[] {
   try {
     const raw = localStorage.getItem(SUBMISSION_HISTORY_KEY);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => ({
+      ...item,
+      studentName: String(item.studentName ?? 'Học sinh'),
+      className: String(item.className ?? ''),
+    }));
   } catch {
     return [];
   }
@@ -162,7 +242,8 @@ export function removeUnsyncedSubmission(timestamp: number): void {
 // 4. Gửi kết quả lên Google Sheets (data2)
 export async function sendSubmissionToData2(
   data2Url: string,
-  record: SubmissionRecord
+  record: SubmissionRecord,
+  options?: { isUpdate?: boolean }
 ): Promise<{ success: boolean; message: string }> {
   const normalizedUrl = normalizeAppsScriptUrl(data2Url);
   if (!normalizedUrl) {
@@ -172,7 +253,32 @@ export async function sendSubmissionToData2(
     };
   }
 
+  const isUpdate = options?.isUpdate === true;
+
+  // Xây dựng URL kèm tham số truy vấn: Đảm bảo dù Google Apps Script đọc e.parameter hay e.postData đều nhận diện chuẩn lệnh sửa điểm
+  let targetUrl = normalizedUrl;
+  try {
+    const urlObj = new URL(normalizedUrl);
+    if (isUpdate) {
+      urlObj.searchParams.set('action', 'update');
+      urlObj.searchParams.set('isUpdate', 'true');
+      urlObj.searchParams.set('studentName', record.studentName || '');
+      urlObj.searchParams.set('className', record.className || '');
+      urlObj.searchParams.set('totalScore', String(record.totalScore ?? 0));
+      urlObj.searchParams.set('scoreString', record.scoreString || '');
+      if (record.stt) {
+        urlObj.searchParams.set('stt', String(record.stt));
+      }
+    }
+    targetUrl = urlObj.toString();
+  } catch {
+    targetUrl = normalizedUrl;
+  }
+
   const payload = {
+    action: isUpdate ? 'update' : 'submit',
+    isUpdate: isUpdate,
+    stt: record.stt,
     studentName: record.studentName,
     className: record.className,
     totalScore: record.totalScore,
@@ -191,7 +297,7 @@ export async function sendSubmissionToData2(
 
   try {
     // Gửi bằng mode 'no-cors' với Content-Type text/plain để tránh browser chặn redirect 302 của Apps Script
-    await fetch(normalizedUrl, {
+    await fetch(targetUrl, {
       method: 'POST',
       mode: 'no-cors',
       headers: {
@@ -202,15 +308,19 @@ export async function sendSubmissionToData2(
 
     return {
       success: true,
-      message: 'Đã gửi điểm cho giáo viên',
+      message: isUpdate ? 'Đã lưu thay thế điểm số học sinh thành công!' : 'Đã gửi điểm cho giáo viên',
     };
   } catch (error) {
     console.warn('Lỗi khi gửi kết quả lên Google Sheet data2:', error);
-    // Khi lỗi mạng, đưa vào hàng đợi ngoại tuyến
-    queueUnsyncedSubmission(record);
+    // CHỈ đưa vào hàng đợi ngoại tuyến nếu là bài nộp mới. TUYỆT ĐỐI không đưa lệnh sửa điểm (isUpdate) vào hàng đợi để tránh bị gửi lại thành bài nộp mới!
+    if (!isUpdate) {
+      queueUnsyncedSubmission(record);
+    }
     return {
       success: false,
-      message: 'Mất kết nối mạng. Đã lưu vào hàng đợi ngoại tuyến và sẽ tự động đồng bộ khi có mạng lại!',
+      message: isUpdate
+        ? 'Không thể kết nối đến Google Sheets. Điểm đã được lưu trên máy của bạn!'
+        : 'Mất kết nối mạng. Đã lưu vào hàng đợi ngoại tuyến và sẽ tự động đồng bộ khi có mạng lại!',
     };
   }
 }
@@ -385,8 +495,8 @@ export async function fetchSubmissionsFromData2(data2Url: string): Promise<Submi
         const parsedIp = typeof rawIp === 'string' ? rawIp.trim() : String(rawIp || '').trim();
         return {
           stt: item.stt || index + 1,
-          studentName: item.studentName || 'Học sinh',
-          className: item.className || '6a6',
+          studentName: String(item.studentName ?? 'Học sinh'),
+          className: String(item.className ?? '6a6'),
           totalScore: Number(item.totalScore) || 0,
           maxScore: 10,
           scoreString: item.scoreString || '',

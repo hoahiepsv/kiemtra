@@ -225,43 +225,156 @@ export const APPS_SCRIPT_DATA2 = `/**
  */
 
 // Hàm nhận kết quả thi từ học sinh gửi lên
+function removeAccents(str) {
+  if (!str) return "";
+  return String(str)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .trim();
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(10000); // Khóa tránh xung đột khi nhiều học sinh nộp cùng lúc
+  try {
+    lock.waitLock(15000);
+  } catch (t) {}
 
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getActiveSheet(); // Hoặc ss.getSheetByName("data2");
+    var sheet = ss.getSheetByName("data2") || ss.getActiveSheet();
     
     var data = {};
-    if (e.postData && e.postData.contents) {
+    if (e && e.postData && e.postData.contents) {
       try {
         data = JSON.parse(e.postData.contents);
       } catch (err) {
-        data = e.parameter || {};
+        data = {};
       }
-    } else {
-      data = e.parameter || {};
+    }
+    // Gộp cả e.parameter nếu có
+    if (e && e.parameter) {
+      for (var key in e.parameter) {
+        if (data[key] === undefined || data[key] === null || data[key] === "") {
+          data[key] = e.parameter[key];
+        }
+      }
     }
 
-    var studentName = data.studentName || data.name || "Học sinh";
-    var className = data.className || data.class || "6A";
+    var isUpdate = (
+      data.action === "update" ||
+      data.action === "edit" ||
+      data.action === "regrade" ||
+      data.isUpdate === true ||
+      String(data.isUpdate) === "true" ||
+      (e && e.parameter && (e.parameter.action === "update" || e.parameter.isUpdate === "true"))
+    );
+
+    var studentName = String(data.studentName || data.name || "Học sinh").trim();
+    var className = String(data.className || data.class || "").trim();
     var totalScore = data.totalScore !== undefined ? Number(data.totalScore) : 0;
-    var scoreString = data.scoreString || data.detailedScores || "";
+    var scoreString = String(data.scoreString || data.detailedScores || "");
     var startTime = data.startTime || "";
     var endTime = data.endTime || "";
     var totalDuration = data.totalDuration || "";
     var clientIp = data.ip || data.ipAddress || data.clientIp || data.ipHocSinh || "";
 
-    // Tìm dòng kế tiếp cần ghi
     var lastRow = sheet.getLastRow();
+    var lastCol = Math.max(sheet.getLastColumn(), 9);
+
+    // 1. Tự động nhận diện cột từ dòng tiêu đề (Dòng 1)
+    var headers = lastRow >= 1 ? (sheet.getRange(1, 1, 1, lastCol).getValues()[0] || []) : [];
+    var sttColIdx = 0;        // Mặc định Cột A (0)
+    var nameColIdx = 1;       // Mặc định Cột B (1)
+    var classColIdx = 2;      // Mặc định Cột C (2)
+    var scoreColIdx = 3;      // Mặc định Cột D (3)
+    var detailColIdx = 4;     // Mặc định Cột E (4)
+    var ipColIdx = 8;         // Mặc định Cột I (8)
+
+    for (var h = 0; h < headers.length; h++) {
+      var hText = removeAccents(String(headers[h] || ""));
+      if (hText.indexOf("stt") !== -1 || hText === "so thu tu") sttColIdx = h;
+      else if (hText.indexOf("ten") !== -1 || hText.indexOf("ho ten") !== -1 || hText.indexOf("hoc sinh") !== -1) nameColIdx = h;
+      else if (hText.indexOf("lop") !== -1 || hText.indexOf("class") !== -1) classColIdx = h;
+      else if (hText.indexOf("tong diem") !== -1 || hText === "diem" || hText.indexOf("score") !== -1) scoreColIdx = h;
+      else if (hText.indexOf("diem tung cau") !== -1 || hText.indexOf("chi tiet") !== -1) detailColIdx = h;
+      else if (hText.indexOf("ip") !== -1 || hText.indexOf("cot 9") !== -1) ipColIdx = h;
+    }
+
+    var targetRow = -1;
+
+    // 2. Tìm dòng học sinh nếu bảng đã có dữ liệu
+    if (lastRow >= 2) {
+      var allRows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+      var cleanTargetName = removeAccents(studentName);
+      var cleanTargetClass = removeAccents(className);
+      var rawTargetName = cleanTargetName.replace(/\s+/g, "");
+      var rawTargetClass = cleanTargetClass.replace(/\s+/g, "");
+
+      // Ưu tiên 1: Khớp chuẩn Họ tên + Lớp (khử dấu, không phân biệt hoa thường và khoảng trắng)
+      if (rawTargetName) {
+        for (var r = allRows.length - 1; r >= 0; r--) {
+          var rName = removeAccents(String(allRows[r][nameColIdx] || ""));
+          var rClass = removeAccents(String(allRows[r][classColIdx] || ""));
+          var rRawName = rName.replace(/\s+/g, "");
+          var rRawClass = rClass.replace(/\s+/g, "");
+
+          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName) || (rRawName && rawTargetName && (rRawName.indexOf(rawTargetName) !== -1 || rawTargetName.indexOf(rRawName) !== -1));
+          var classMatches = !rawTargetClass || !rRawClass || (rRawClass === rawTargetClass);
+
+          if (nameMatches && classMatches) {
+            targetRow = r + 2;
+            break;
+          }
+        }
+      }
+
+      // Ưu tiên 2: Tìm theo STT nếu chưa tìm thấy bằng tên
+      if (targetRow === -1 && data.stt !== undefined && data.stt !== null && String(data.stt).trim() !== "") {
+        var targetSTT = parseInt(data.stt, 10);
+        if (!isNaN(targetSTT) && targetSTT > 0) {
+          for (var r = 0; r < allRows.length; r++) {
+            var valSTT = parseInt(allRows[r][sttColIdx], 10);
+            if (valSTT === targetSTT) {
+              targetRow = r + 2;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // 3. NẾU LÀ YÊU CẦU SỬA ĐIỂM (isUpdate) HOẶC ĐÃ TÌM THẤY HỌC SINH CÓ SẴN:
+    // TUYỆT ĐỐI THAY THẾ TRỰC TIẾP Ô ĐIỂM, KHÔNG TẠO THÊM DÒNG MỚI!
+    if (isUpdate || targetRow >= 2) {
+      if (targetRow === -1) {
+        // Nếu lệnh sửa điểm không khớp chính xác tên, cập nhật dòng học sinh gần nhất (lastRow)
+        targetRow = lastRow >= 2 ? lastRow : 2;
+      }
+
+      // CHỈ LƯU ĐÈ SỐ ĐIỂM MỚI CỦA HỌC SINH VÀO ĐÚNG Ô CỘT TỔNG ĐIỂM
+      sheet.getRange(targetRow, scoreColIdx + 1).setValue(totalScore);
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        action: "updated",
+        message: "Đã lưu đè số điểm mới của học sinh vào đúng ô cột Tổng điểm tại dòng " + targetRow + " thành công!",
+        row: targetRow,
+        studentName: studentName,
+        totalScore: totalScore
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 4. CHỈ KHI LÀ BÀI NỘP MỚI LẦN ĐẦU (isUpdate = false và không trùng học sinh):
     var nextRow = lastRow + 1;
     if (nextRow < 2) nextRow = 2; // Dòng 1 là tiêu đề
 
     // Tính STT
     var nextSTT = 1;
     if (lastRow >= 2) {
-      var lastSTTVal = sheet.getRange(lastRow, 1).getValue();
+      var lastSTTVal = sheet.getRange(lastRow, sttColIdx + 1).getValue();
       if (!isNaN(parseInt(lastSTTVal, 10))) {
         nextSTT = parseInt(lastSTTVal, 10) + 1;
       } else {
@@ -269,21 +382,23 @@ function doPost(e) {
       }
     }
 
-    // Ghi các cột: A:STT, B:Học sinh, C:Lớp, D:Tổng điểm, E:Điểm từng câu, F:Bắt đầu, G:Nộp bài, H:Tổng thời gian, I:IP học sinh (Cột 9)
-    sheet.getRange(nextRow, 1, 1, 9).setValues([[
-      nextSTT,
-      studentName,
-      className,
-      totalScore,
-      scoreString,
-      startTime,
-      endTime,
-      totalDuration,
-      clientIp
-    ]]);
+    var newRowData = new Array(Math.max(lastCol, 9));
+    for (var k = 0; k < newRowData.length; k++) newRowData[k] = "";
+    newRowData[sttColIdx] = nextSTT;
+    newRowData[nameColIdx] = studentName;
+    newRowData[classColIdx] = className;
+    newRowData[scoreColIdx] = totalScore;
+    newRowData[detailColIdx] = scoreString;
+    newRowData[5] = startTime;
+    newRowData[6] = endTime;
+    newRowData[7] = totalDuration;
+    newRowData[ipColIdx] = clientIp;
+
+    sheet.getRange(nextRow, 1, 1, newRowData.length).setValues([newRowData]);
 
     var response = {
       status: "success",
+      action: "inserted",
       message: "Đã lưu kết quả bài thi vào Google Sheet data2 thành công!",
       stt: nextSTT,
       row: nextRow,
@@ -308,14 +423,20 @@ function doPost(e) {
 
 // Hàm lấy danh sách kết quả học sinh đã nộp để hiển thị Bảng xếp hạng & Báo cáo
 function doGet(e) {
+  var action = (e && e.parameter && e.parameter.action) || "";
+  if (action === "update" || action === "edit" || (e && e.parameter && (e.parameter.isUpdate === "true" || e.parameter.isUpdate === true))) {
+    return doPost(e);
+  }
+
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getActiveSheet();
+    var sheet = ss.getSheetByName("data2") || ss.getActiveSheet();
     var lastRow = sheet.getLastRow();
     var lastCol = Math.max(sheet.getLastColumn(), 9);
     
     var submissions = [];
     if (lastRow >= 2) {
+      var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0] || [];
       // Cột 9 trong sheet data2 là IP học sinh
       var ipColIdx = 8; // Mặc định cột 9 (chỉ số 8)
       for (var h = 0; h < headers.length; h++) {
@@ -375,7 +496,11 @@ export const APPS_SCRIPT_COMBINED = `/**
  */
 
 function doGet(e) {
-  var action = (e.parameter && e.parameter.action) || "getExam";
+  var action = (e && e.parameter && e.parameter.action) || "getExam";
+  if (action === "update" || action === "edit" || (e && e.parameter && (e.parameter.isUpdate === "true" || e.parameter.isUpdate === true))) {
+    return doPost(e);
+  }
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
   if (action === "getLeaderboard") {
@@ -518,29 +643,122 @@ function doPost(e) {
 
     // TRƯỜNG HỢP 2: Lưu kết quả nộp bài của học sinh vào sheet data2
     var sheet = ss.getSheetByName("data2") || ss.getActiveSheet();
+    var studentName = String(data.studentName || data.name || "Học sinh").trim();
+    var className = String(data.className || data.class || "").trim();
+    var totalScore = data.totalScore !== undefined ? Number(data.totalScore) : 0;
+    var scoreString = String(data.scoreString || data.detailedScores || "");
+    var isUpdate = (
+      data.action === "update" ||
+      data.action === "edit" ||
+      data.action === "regrade" ||
+      data.isUpdate === true ||
+      String(data.isUpdate) === "true" ||
+      (e && e.parameter && (e.parameter.action === "update" || e.parameter.isUpdate === "true"))
+    );
+    var clientIp = data.ip || data.ipAddress || data.clientIp || data.ipHocSinh || "";
+
     var lastRow = sheet.getLastRow();
+    var lastCol = Math.max(sheet.getLastColumn(), 9);
+
+    // Tự động nhận diện cột
+    var headers = lastRow >= 1 ? (sheet.getRange(1, 1, 1, lastCol).getValues()[0] || []) : [];
+    var sttColIdx = 0;
+    var nameColIdx = 1;
+    var classColIdx = 2;
+    var scoreColIdx = 3;
+    var detailColIdx = 4;
+    var ipColIdx = 8;
+
+    for (var h = 0; h < headers.length; h++) {
+      var hText = removeAccents(String(headers[h] || ""));
+      if (hText.indexOf("stt") !== -1 || hText === "so thu tu") sttColIdx = h;
+      else if (hText.indexOf("ten") !== -1 || hText.indexOf("ho ten") !== -1 || hText.indexOf("hoc sinh") !== -1) nameColIdx = h;
+      else if (hText.indexOf("lop") !== -1 || hText.indexOf("class") !== -1) classColIdx = h;
+      else if (hText.indexOf("tong diem") !== -1 || hText === "diem" || hText.indexOf("score") !== -1) scoreColIdx = h;
+      else if (hText.indexOf("diem tung cau") !== -1 || hText.indexOf("chi tiet") !== -1) detailColIdx = h;
+      else if (hText.indexOf("ip") !== -1 || hText.indexOf("cot 9") !== -1) ipColIdx = h;
+    }
+
+    var targetRow = -1;
+
+    // Tìm dòng học sinh
+    if (lastRow >= 2) {
+      var allRows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+      var cleanTargetName = removeAccents(studentName);
+      var cleanTargetClass = removeAccents(className);
+      var rawTargetName = cleanTargetName.replace(/\s+/g, "");
+      var rawTargetClass = cleanTargetClass.replace(/\s+/g, "");
+
+      if (rawTargetName) {
+        for (var r = allRows.length - 1; r >= 0; r--) {
+          var rName = removeAccents(String(allRows[r][nameColIdx] || ""));
+          var rClass = removeAccents(String(allRows[r][classColIdx] || ""));
+          var rRawName = rName.replace(/\s+/g, "");
+          var rRawClass = rClass.replace(/\s+/g, "");
+
+          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName) || (rRawName && rawTargetName && (rRawName.indexOf(rawTargetName) !== -1 || rawTargetName.indexOf(rRawName) !== -1));
+          var classMatches = !rawTargetClass || !rRawClass || (rRawClass === rawTargetClass);
+
+          if (nameMatches && classMatches) {
+            targetRow = r + 2;
+            break;
+          }
+        }
+      }
+
+      if (targetRow === -1 && data.stt !== undefined && data.stt !== null && String(data.stt).trim() !== "") {
+        var targetSTT = parseInt(data.stt, 10);
+        if (!isNaN(targetSTT) && targetSTT > 0) {
+          for (var r = 0; r < allRows.length; r++) {
+            var valSTT = parseInt(allRows[r][sttColIdx], 10);
+            if (valSTT === targetSTT) {
+              targetRow = r + 2;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // NẾU LÀ YÊU CẦU SỬA ĐIỂM (isUpdate) HOẶC ĐÃ CÓ HỌC SINH:
+    if (isUpdate || targetRow >= 2) {
+      if (targetRow === -1) {
+        targetRow = lastRow >= 2 ? lastRow : 2;
+      }
+
+      // CHỈ LƯU ĐÈ SỐ ĐIỂM MỚI CỦA HỌC SINH VÀO ĐÚNG Ô CỘT TỔNG ĐIỂM
+      sheet.getRange(targetRow, scoreColIdx + 1).setValue(totalScore);
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        action: "updated",
+        message: "Đã lưu đè số điểm mới của học sinh vào đúng ô cột Tổng điểm tại dòng " + targetRow + " thành công!",
+        row: targetRow
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     var nextRow = Math.max(lastRow + 1, 2);
     var nextSTT = 1;
     if (lastRow >= 2) {
-      var prevSTT = parseInt(sheet.getRange(lastRow, 1).getValue(), 10);
+      var prevSTT = parseInt(sheet.getRange(lastRow, sttColIdx + 1).getValue(), 10);
       nextSTT = isNaN(prevSTT) ? lastRow : prevSTT + 1;
     }
 
-    var clientIp = data.ip || data.ipAddress || data.clientIp || data.ipHocSinh || "";
+    var newRowData = new Array(Math.max(lastCol, 9));
+    for (var k = 0; k < newRowData.length; k++) newRowData[k] = "";
+    newRowData[sttColIdx] = nextSTT;
+    newRowData[nameColIdx] = studentName;
+    newRowData[classColIdx] = className;
+    newRowData[scoreColIdx] = totalScore;
+    newRowData[detailColIdx] = scoreString;
+    newRowData[5] = data.startTime || "";
+    newRowData[6] = data.endTime || "";
+    newRowData[7] = data.totalDuration || "";
+    newRowData[ipColIdx] = clientIp;
 
-    sheet.getRange(nextRow, 1, 1, 9).setValues([[
-      nextSTT,
-      data.studentName || "Học sinh",
-      data.className || "6A",
-      Number(data.totalScore) || 0,
-      data.scoreString || "",
-      data.startTime || "",
-      data.endTime || "",
-      data.totalDuration || "",
-      clientIp
-    ]]);
+    sheet.getRange(nextRow, 1, 1, newRowData.length).setValues([newRowData]);
 
-    return ContentService.createTextOutput(JSON.stringify({ status: "success", stt: nextSTT }))
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", action: "inserted", stt: nextSTT }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
