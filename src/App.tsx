@@ -55,6 +55,7 @@ import {
 } from './utils/syncService';
 import { checkEssayAnswerMatch } from './utils/gradeService';
 import { fetchClientIp } from './utils/ipService';
+import { formatStudentName, formatClassName } from './utils/studentFormatting';
 
 type AppScreen = 'start' | 'exam' | 'result';
 
@@ -65,12 +66,17 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const isOldData1 = !parsed.data1Url || parsed.data1Url.includes('AKfycbzVR-FeTa2IZ20Nodk3ts3TUJqiadghILLCzyc8NZ6EAqzECm9gSbFVvA4EBmmOMpCO2A');
+        const isOldData1 =
+          !parsed.data1Url ||
+          parsed.data1Url.includes('AKfycbzVR-FeTa2IZ20Nodk3ts3TUJqiadghILLCzyc8NZ6EAqzECm9gSbFVvA4EBmmOMpCO2A') ||
+          parsed.data1Url.includes('AKfycbz9zQcN3CuaLsjyHEQeNiR5vJv_gfWhwBKDFL35k-q5VVQQwr0yBqBPCbyE1OF1A86jsw');
         const activeData1Url = isOldData1 ? DEFAULT_EXAM_CONFIG.data1Url : normalizeAppsScriptUrl(parsed.data1Url);
         const isOldData2 =
           !parsed.data2Url ||
           parsed.data2Url.includes('AKfycbw3o7fi087YgBy8WjQZwWqavHeUN8jFfr6T3d2kuWkF4WMajeUlI8xajSP0ZkbPKGbB') ||
-          parsed.data2Url.includes('AKfycbxxT7uc08D92XLmNaTvbXJvrrDBYN257-ByspJ00BtOJvankVLbdqfHKddfDm-7BG2s');
+          parsed.data2Url.includes('AKfycbxxT7uc08D92XLmNaTvbXJvrrDBYN257-ByspJ00BtOJvankVLbdqfHKddfDm-7BG2s') ||
+          parsed.data2Url.includes('AKfycbzS107icL7jGKWU8gZFzC87WeJCRkBYxmTnqJNAwu63Vm1QZomRjn2P2JczWS5OguLn') ||
+          parsed.data2Url.includes('AKfycbyn8IZAj243ZY4mkSVfAkZhUICFWwmKFq-FmjuYDZ4A1ghDhmuAri6Y9z61JlDBu8FY');
         const activeData2Url = isOldData2 ? DEFAULT_EXAM_CONFIG.data2Url : normalizeAppsScriptUrl(parsed.data2Url);
         return {
           ...DEFAULT_EXAM_CONFIG,
@@ -344,12 +350,14 @@ export default function App() {
 
   // 3. Start Exam Action
   const handleStartExam = (name: string, cls: string) => {
+    const formattedName = formatStudentName(name);
+    const formattedClass = formatClassName(cls);
     const now = new Date();
     const formattedStart = formatDateForSheet(now);
     const ts = now.getTime();
 
-    setStudentName(name);
-    setClassName(cls);
+    setStudentName(formattedName);
+    setClassName(formattedClass);
     setStartFormattedTime(formattedStart);
     setStartTimestamp(ts);
     setAnswers({});
@@ -358,7 +366,7 @@ export default function App() {
 
     // Save initial draft immediately
     saveDraftExam({
-      studentInfo: { fullName: name, className: cls },
+      studentInfo: { fullName: formattedName, className: formattedClass },
       answers: {},
       startTime: formattedStart,
       startTimestamp: ts,
@@ -371,15 +379,17 @@ export default function App() {
     // Friendly push notification reminder
     showPushNotification(
       'Bắt đầu làm bài kiểm tra',
-      `Chúc ${name} làm bài thật tốt! Thời gian làm bài là ${config.durationMinutes} phút.`
+      `Chúc ${formattedName} làm bài thật tốt! Thời gian làm bài là ${config.durationMinutes} phút.`
     );
   };
 
   // Resume Draft
   const handleResumeDraft = () => {
     if (!existingDraft) return;
-    setStudentName(existingDraft.studentInfo.fullName);
-    setClassName(existingDraft.studentInfo.className);
+    const formattedName = formatStudentName(existingDraft.studentInfo.fullName);
+    const formattedClass = formatClassName(existingDraft.studentInfo.className);
+    setStudentName(formattedName);
+    setClassName(formattedClass);
     setAnswers(existingDraft.answers);
     setStartFormattedTime(existingDraft.startTime);
     setStartTimestamp(existingDraft.startTimestamp);
@@ -510,8 +520,8 @@ export default function App() {
 
         const record: SubmissionRecord = {
           stt: nextSTT,
-          studentName: studentName || 'Học sinh',
-          className: className || '',
+          studentName: formatStudentName(studentName || 'Học sinh'),
+          className: formatClassName(className || ''),
           totalScore,
           maxScore,
           scoreString,
@@ -856,7 +866,7 @@ export default function App() {
           onSelectSubmission={(sub) => {
             setPreviewSubmission(sub);
           }}
-          onUpdateSubmission={async (updated) => {
+          onUpdateSubmission={async (updated, meta) => {
             if (previewSubmission) {
               setPreviewSubmission(updated);
             }
@@ -870,7 +880,12 @@ export default function App() {
             const updatedList = updateSubmissionInHistory(updated);
             setHistoryList(updatedList);
             if (config.data2Url) {
-              await sendSubmissionToData2(config.data2Url, updated, { isUpdate: true });
+              await sendSubmissionToData2(config.data2Url, updated, {
+                isUpdate: true,
+                targetOrderNumber: meta?.targetOrderNumber,
+                questionScore: meta?.questionScore,
+                isCorrect: meta?.isCorrect,
+              });
             }
           }}
         />
