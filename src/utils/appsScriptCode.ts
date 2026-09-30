@@ -580,8 +580,9 @@ function onOpen() {
     .createMenu("Kiểm Tra Thường Xuyên")
     .addItem("1. Tạo mẫu sheet data1 (Đề thi & Cấu hình)", "setupData1Sheet")
     .addItem("2. Tạo mẫu sheet data2 (Kết quả & Cột từng câu)", "setupData2Sheet")
+    .addItem("3. Quét & Tìm IP trùng nhau (Cột I)", "kiemTraTrungLapIP")
     .addSeparator()
-    .addItem("3. Tạo tự động cả 2 sheet data1 & data2", "setupBothSheets")
+    .addItem("4. Tạo tự động cả 2 sheet data1 & data2", "setupBothSheets")
     .addToUi();
 }
 
@@ -658,6 +659,136 @@ function setupData2Sheet() {
 
   sheet.setFrozenRows(1);
   sheet.autoResizeColumns(1, 9);
+}
+
+// =========================================================================
+// THUẬT TOÁN QUÉT & TÌM IP TRÙNG NHAU TRONG CỘT I (DATASHEET 2)
+// =========================================================================
+function kiemTraTrungLapIP() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("data2") || ss.getActiveSheet();
+  var lastRow = sheet.getLastRow();
+  var lastCol = Math.max(sheet.getLastColumn(), 9);
+
+  if (lastRow < 2) {
+    SpreadsheetApp.getUi().alert("Trang tính data2 chưa có dữ liệu nộp bài nào!");
+    return;
+  }
+
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var ipColIdx = 8; // Mặc định Cột I (chỉ số 8)
+  for (var h = 0; h < headers.length; h++) {
+    var hName = removeAccents(String(headers[h] || ""));
+    if (hName.indexOf("ip") !== -1 || hName.indexOf("cot 9") !== -1 || hName.indexOf("cot i") !== -1) {
+      ipColIdx = h;
+      break;
+    }
+  }
+
+  var data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  var ipMap = {};
+
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    var studentName = String(row[1] || "").trim();
+    if (!studentName) continue;
+
+    var rawIp = "";
+    if (row[8] !== undefined && row[8] !== null && String(row[8]).trim() !== "") {
+      rawIp = String(row[8]).trim();
+    } else if (row[ipColIdx] !== undefined && row[ipColIdx] !== null) {
+      rawIp = String(row[ipColIdx]).trim();
+    }
+
+    var cleanIp = rawIp.replace(/\\s+/g, "").split(",")[0].trim();
+    if (!cleanIp || cleanIp === "-" || cleanIp === "N/A" || cleanIp.toLowerCase() === "null") continue;
+
+    if (!ipMap[cleanIp]) {
+      ipMap[cleanIp] = [];
+    }
+    ipMap[cleanIp].push({
+      rowIndex: i + 2,
+      stt: row[0],
+      studentName: studentName,
+      className: String(row[2] || "").trim(),
+      totalScore: Number(row[3]) || 0,
+      endTime: String(row[6] || row[5] || ""),
+      duration: String(row[7] || "")
+    });
+  }
+
+  var violations = [];
+  var rowsToHighlight = [];
+
+  for (var ipKey in ipMap) {
+    if (ipMap[ipKey].length > 1) {
+      violations.push({
+        ip: ipKey,
+        count: ipMap[ipKey].length,
+        records: ipMap[ipKey]
+      });
+      for (var r = 0; r < ipMap[ipKey].length; r++) {
+        rowsToHighlight.push(ipMap[ipKey][r].rowIndex);
+      }
+    }
+  }
+
+  if (violations.length === 0) {
+    SpreadsheetApp.getUi().alert("Tuyệt vời! Không phát hiện địa chỉ IP nào làm bài trên 1 lần trong Cột I.");
+    return;
+  }
+
+  // Đổi màu cảnh báo trên sheet data2
+  for (var k = 0; k < rowsToHighlight.length; k++) {
+    sheet.getRange(rowsToHighlight[k], 1, 1, lastCol).setBackground("#fff7ed");
+    sheet.getRange(rowsToHighlight[k], ipColIdx + 1).setBackground("#fecdd3");
+  }
+
+  // Tự động tạo bảng cảnh báo chi tiết
+  var reportSheet = ss.getSheetByName("canh_bao_ip");
+  if (!reportSheet) {
+    reportSheet = ss.insertSheet("canh_bao_ip");
+  } else {
+    reportSheet.clear();
+  }
+
+  var reportHeaders = [["STT", "Địa chỉ IP (Cột I)", "Lần làm", "Họ và tên HS", "Lớp", "Điểm số", "Thời gian nộp", "Thời lượng", "Phân loại vi phạm"]];
+  reportSheet.getRange(1, 1, 1, reportHeaders[0].length).setValues(reportHeaders).setFontWeight("bold").setBackground("#dc2626").setFontColor("#ffffff");
+
+  var outRows = [];
+  var outStt = 1;
+  for (var v = 0; v < violations.length; v++) {
+    var vItem = violations[v];
+    var namesSet = {};
+    for (var n = 0; n < vItem.records.length; n++) namesSet[vItem.records[n].studentName] = true;
+    var isSameStudent = Object.keys(namesSet).length === 1;
+
+    for (var recIdx = 0; recIdx < vItem.records.length; recIdx++) {
+      var rec = vItem.records[recIdx];
+      outRows.push([
+        outStt++,
+        vItem.ip,
+        "Lần " + (recIdx + 1) + " / " + vItem.count,
+        rec.studentName,
+        rec.className,
+        rec.totalScore,
+        rec.endTime,
+        rec.duration,
+        isSameStudent ? "Cùng 1 HS làm lại nhiều lần" : "Nhiều HS dùng chung 1 máy tính / IP"
+      ]);
+    }
+  }
+
+  if (outRows.length > 0) {
+    reportSheet.getRange(2, 1, outRows.length, reportHeaders[0].length).setValues(outRows);
+    reportSheet.autoResizeColumns(1, reportHeaders[0].length);
+  }
+
+  SpreadsheetApp.getUi().alert(
+    "ĐÃ TÌM THẤY " + violations.length + " ĐỊA CHỈ IP LÀM BÀI TRÊN 1 LẦN (CỘT I):\n" +
+    "- Tổng số bài nộp liên quan: " + rowsToHighlight.length + " bài\n" +
+    "- Chi tiết đã được xuất sang trang tính mới 'canh_bao_ip' và tô màu cảnh báo trên sheet 'data2'!"
+  );
 }
 
 // =========================================================================

@@ -90,22 +90,21 @@ export function clearAllExamData(): void {
 export function syncSubmissionsFromSheetToHistory(sheetRecords: SubmissionRecord[]): SubmissionRecord[] {
   try {
     const list = Array.isArray(sheetRecords) ? [...sheetRecords] : [];
-    // Sort newest first
-    list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-    // Lọc bỏ trùng lặp nếu trong Google Sheets trước đây đã bị ghi nhiều dòng cho 1 học sinh
+    // Giữ nguyên toàn bộ các bài nộp từ datasheet 2 (không lọc bỏ các lần nộp lại của cùng 1 học sinh)
+    // để thuật toán kiểm tra IP có đầy đủ dữ liệu phát hiện các lần làm lại trên cùng 1 IP
     const seen = new Set<string>();
-    const uniqueList: SubmissionRecord[] = [];
+    const fullList: SubmissionRecord[] = [];
     for (const item of list) {
-      const nameKey = `${String(item.studentName || '').toLowerCase().trim()}_${String(item.className || '').toLowerCase().trim()}`;
-      if (!seen.has(nameKey)) {
-        seen.add(nameKey);
-        uniqueList.push(item);
+      // Chỉ loại bỏ nếu trùng khớp 100% dòng dữ liệu (cùng STT, tên, lớp, giờ nộp, điểm)
+      const uniqueRowKey = `${item.stt || ''}_${String(item.studentName || '').toLowerCase().trim()}_${String(item.className || '').toLowerCase().trim()}_${item.endTime || ''}_${item.startTime || ''}_${item.totalScore}`;
+      if (!seen.has(uniqueRowKey)) {
+        seen.add(uniqueRowKey);
+        fullList.push(item);
       }
     }
 
-    localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(uniqueList.slice(0, 300)));
-    return uniqueList;
+    localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(fullList.slice(0, 1000)));
+    return fullList;
   } catch (e) {
     console.error('Error syncing submissions from sheet to history:', e);
     return sheetRecords || [];
@@ -532,6 +531,13 @@ export async function fetchSubmissionsFromData2(data2Url: string): Promise<Submi
         const rawIp =
           item.ipAddress ??
           item.ipHocSinh ??
+          item['Cột I'] ??
+          item['cột I'] ??
+          item['Cột i'] ??
+          item['cot i'] ??
+          item['Cot I'] ??
+          item.columnI ??
+          item.colI ??
           item['IP học sinh'] ??
           item['IP Học Sinh'] ??
           item['ip_hoc_sinh'] ??
