@@ -7,7 +7,7 @@ export const DEFAULT_EXAM_CONFIG: ExamConfig = {
   durationMinutes: 15,
   copyrightText: 'Lê Hoà Hiệp - 0983.676.470',
   data1Url: 'https://script.google.com/macros/s/AKfycbxdxVRbNGgLoTtofRU9BeB8NLxQyU3z2dAmiGndNwOjJ8T9NzioN0VsVTaipKwg8KBOpw/exec',
-  data2Url: 'https://script.google.com/macros/s/AKfycbzNodWtP-Y8mIC1ZFkH9iNCH7mhZYmUXDrlNL4-haoZ8OwUOBfMcYWmJwmDR_EHUPis/exec',
+  data2Url: 'https://script.google.com/macros/s/AKfycby75dcZbrgLbtg2tymL47LqvmkItG1RD4Tab7dPStqMxyw8k2MGtP_zur7qwkAI_OJU/exec',
 };
 
 export const DEFAULT_QUESTIONS: Question[] = [];
