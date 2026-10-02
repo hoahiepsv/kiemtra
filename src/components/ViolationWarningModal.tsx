@@ -18,6 +18,7 @@ import {
   Filter,
   CheckCircle2,
   TrendingUp,
+  Loader2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SubmissionRecord } from '../types';
@@ -151,47 +152,42 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-rose-600 via-rose-700 to-amber-700 px-6 py-4 sm:py-5 text-white flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner">
-              <ShieldAlert className="w-5 h-5 text-white" />
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-1 sm:p-4">
+      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-4xl w-full max-h-[96vh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+        {/* Header - Thu gọn trên mobile */}
+        <div className="bg-gradient-to-r from-rose-600 via-rose-700 to-amber-700 px-3 py-2 sm:px-6 sm:py-3 text-white flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner flex-shrink-0">
+              <ShieldAlert className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-base sm:text-xl">
-                  Cảnh Báo Vi Phạm - Trùng Lặp IP Máy Tính
-                </h3>
-                <span className="text-[10px] font-bold uppercase bg-white/20 text-white px-2.5 py-0.5 rounded-full border border-white/25">
-                  Kiểm duyệt thi
-                </span>
-              </div>
-              <p className="text-xs text-rose-100 mt-0.5">
-                Thống kê các IP máy tính đã làm bài trên 1 lần: tên học sinh, lớp, số điểm từng lần làm bài
-              </p>
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              <h3 className="font-extrabold text-xs sm:text-base tracking-tight truncate">
+                Cảnh Báo Vi Phạm (Trùng Lặp IP)
+              </h3>
+              <span className="hidden xs:inline-flex text-[9px] sm:text-[10px] font-bold uppercase bg-white/20 text-white px-1.5 py-0.5 rounded-full border border-white/25 flex-shrink-0">
+                Kiểm duyệt
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             {onRefreshFromSheet && (
               <button
                 onClick={onRefreshFromSheet}
                 disabled={isSyncing}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-semibold backdrop-blur-md border border-white/20 transition-all cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-semibold backdrop-blur-md border border-white/20 transition-all cursor-pointer disabled:opacity-50"
                 title="Cập nhật bài nộp mới nhất từ Google Sheets"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">{isSyncing ? 'Đang tải...' : 'Lấy từ CSDL'}</span>
+                <span className="hidden sm:inline">{isSyncing ? 'Đang tải...' : 'Lấy CSDL'}</span>
               </button>
             )}
 
             {violationGroups.length > 0 && (
               <button
                 onClick={handleExportExcel}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
-                title="Xuất danh sách vi phạm ra file Excel"
+                className="flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                title="Xuất Excel"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Xuất Excel</span>
@@ -200,109 +196,121 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
 
             <button
               onClick={onClose}
-              className="p-1.5 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
-              title="Đóng"
+              className="p-1 sm:p-1.5 rounded-lg sm:rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
+              title="Quay lại Bảng Quản trị"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
 
-        {/* Metric Overview Cards */}
-        <div className="bg-rose-50/70 border-b border-rose-100 p-4 sm:p-5 flex-shrink-0">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-white p-3 rounded-2xl border border-rose-200/80 shadow-xs flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center flex-shrink-0 font-bold">
-                <Monitor className="w-5 h-5" />
+        {/* Metric Overview Strip - Tinh gọn dạng 4 ô nhỏ trên mobile */}
+        <div className="bg-rose-50/70 border-b border-rose-100 p-1.5 sm:p-3 flex-shrink-0">
+          <div className="grid grid-cols-4 gap-1 sm:gap-2.5">
+            {/* 1. IP vi phạm */}
+            <div className="bg-white p-1 sm:p-2.5 rounded-lg sm:rounded-xl border border-rose-200/80 shadow-2xs text-center sm:text-left sm:flex sm:items-center sm:gap-2.5">
+              <div className="hidden sm:flex w-8 h-8 rounded-lg bg-rose-100 text-rose-700 items-center justify-center flex-shrink-0 font-bold">
+                <Monitor className="w-4 h-4" />
               </div>
-              <div>
-                <p className="text-[11px] font-semibold text-slate-500 uppercase">IP làm trên 1 lần</p>
-                <p className="text-xl font-extrabold text-rose-700">{totalViolatingIps} <span className="text-xs font-normal text-slate-500">địa chỉ</span></p>
-              </div>
-            </div>
-
-            <div className="bg-white p-3 rounded-2xl border border-rose-200/80 shadow-xs flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0 font-bold">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold text-slate-500 uppercase">Lượt nộp liên quan</p>
-                <p className="text-xl font-extrabold text-amber-700">{totalViolatingSubmissions} <span className="text-xs font-normal text-slate-500">bài nộp</span></p>
+              <div className="min-w-0">
+                <p className="text-[9px] sm:text-[11px] font-semibold text-slate-500 uppercase truncate leading-tight">IP trùng</p>
+                <p className="text-xs sm:text-lg font-black text-rose-700 leading-tight">
+                  {totalViolatingIps} <span className="text-[9px] sm:text-xs font-normal text-slate-500 hidden sm:inline">địa chỉ</span>
+                </p>
               </div>
             </div>
 
-            <div className="bg-white p-3 rounded-2xl border border-rose-200/80 shadow-xs flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center flex-shrink-0 font-bold">
-                <UserCheck className="w-5 h-5" />
+            {/* 2. Lượt nộp */}
+            <div className="bg-white p-1 sm:p-2.5 rounded-lg sm:rounded-xl border border-rose-200/80 shadow-2xs text-center sm:text-left sm:flex sm:items-center sm:gap-2.5">
+              <div className="hidden sm:flex w-8 h-8 rounded-lg bg-amber-100 text-amber-700 items-center justify-center flex-shrink-0 font-bold">
+                <AlertTriangle className="w-4 h-4" />
               </div>
-              <div>
-                <p className="text-[11px] font-semibold text-slate-500 uppercase">Cùng 1 HS làm lại</p>
-                <p className="text-xl font-extrabold text-sky-700">{sameStudentGroupsCount} <span className="text-xs font-normal text-slate-500">vụ việc</span></p>
+              <div className="min-w-0">
+                <p className="text-[9px] sm:text-[11px] font-semibold text-slate-500 uppercase truncate leading-tight">Lượt nộp</p>
+                <p className="text-xs sm:text-lg font-black text-amber-700 leading-tight">
+                  {totalViolatingSubmissions} <span className="text-[9px] sm:text-xs font-normal text-slate-500 hidden sm:inline">bài</span>
+                </p>
               </div>
             </div>
 
-            <div className="bg-white p-3 rounded-2xl border border-rose-200/80 shadow-xs flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center flex-shrink-0 font-bold">
-                <Users className="w-5 h-5" />
+            {/* 3. 1 HS làm lại */}
+            <div className="bg-white p-1 sm:p-2.5 rounded-lg sm:rounded-xl border border-rose-200/80 shadow-2xs text-center sm:text-left sm:flex sm:items-center sm:gap-2.5">
+              <div className="hidden sm:flex w-8 h-8 rounded-lg bg-sky-100 text-sky-700 items-center justify-center flex-shrink-0 font-bold">
+                <UserCheck className="w-4 h-4" />
               </div>
-              <div>
-                <p className="text-[11px] font-semibold text-slate-500 uppercase">Dùng chung máy tính</p>
-                <p className="text-xl font-extrabold text-purple-700">{sharedIpGroupsCount} <span className="text-xs font-normal text-slate-500">vụ việc</span></p>
+              <div className="min-w-0">
+                <p className="text-[9px] sm:text-[11px] font-semibold text-slate-500 uppercase truncate leading-tight">1 HS làm lại</p>
+                <p className="text-xs sm:text-lg font-black text-sky-700 leading-tight">
+                  {sameStudentGroupsCount} <span className="text-[9px] sm:text-xs font-normal text-slate-500 hidden sm:inline">vụ</span>
+                </p>
+              </div>
+            </div>
+
+            {/* 4. Chung máy */}
+            <div className="bg-white p-1 sm:p-2.5 rounded-lg sm:rounded-xl border border-rose-200/80 shadow-2xs text-center sm:text-left sm:flex sm:items-center sm:gap-2.5">
+              <div className="hidden sm:flex w-8 h-8 rounded-lg bg-purple-100 text-purple-700 items-center justify-center flex-shrink-0 font-bold">
+                <Users className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] sm:text-[11px] font-semibold text-slate-500 uppercase truncate leading-tight">Chung máy</p>
+                <p className="text-xs sm:text-lg font-black text-purple-700 leading-tight">
+                  {sharedIpGroupsCount} <span className="text-[9px] sm:text-xs font-normal text-slate-500 hidden sm:inline">vụ</span>
+                </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Filter and Search Bar */}
-        <div className="bg-white px-6 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
+        {/* Filter and Search Bar - Gọn gàng trên mobile */}
+        <div className="bg-white px-2.5 py-1.5 sm:px-6 sm:py-2.5 border-b border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-1.5 sm:gap-3 flex-shrink-0">
           {/* Tab Filters */}
-          <div className="flex items-center gap-1.5 text-xs">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setFilterType('all')}
-              className={`px-3 py-1.5 rounded-xl font-semibold transition-all cursor-pointer ${
+              className={`px-2 py-1 sm:px-2.5 sm:py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all cursor-pointer ${
                 filterType === 'all'
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              Tất cả vi phạm ({violationGroups.length})
+              Tất cả ({violationGroups.length})
             </button>
             <button
               onClick={() => setFilterType('same_student')}
-              className={`px-3 py-1.5 rounded-xl font-semibold transition-all cursor-pointer ${
+              className={`px-2 py-1 sm:px-2.5 sm:py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all cursor-pointer ${
                 filterType === 'same_student'
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              1 HS làm lại ({sameStudentGroupsCount})
+              1 HS ({sameStudentGroupsCount})
             </button>
             <button
               onClick={() => setFilterType('shared_ip')}
-              className={`px-3 py-1.5 rounded-xl font-semibold transition-all cursor-pointer ${
+              className={`px-2 py-1 sm:px-2.5 sm:py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all cursor-pointer ${
                 filterType === 'shared_ip'
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              Nhiều HS chung 1 IP ({sharedIpGroupsCount})
+              Chung IP ({sharedIpGroupsCount})
             </button>
           </div>
 
           {/* Search Input */}
-          <div className="relative min-w-[240px] sm:min-w-[280px]">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <div className="relative flex-1 sm:w-60">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Tìm theo IP, tên HS hoặc lớp..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-xs bg-slate-50/50"
+              placeholder="Tìm theo IP, tên HS, lớp..."
+              className="w-full pl-8 pr-6 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-rose-500 text-xs bg-slate-50/50"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
               >
                 ×
               </button>
@@ -311,31 +319,59 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
         </div>
 
         {/* Violations List Container */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/50">
-          {filteredGroups.length === 0 ? (
-            <div className="text-center py-16 px-4 bg-white rounded-3xl border border-dashed border-slate-300">
-              {violationGroups.length === 0 ? (
+        <div className="flex-1 overflow-y-auto p-2 sm:p-5 space-y-2.5 sm:space-y-4 bg-slate-50/50">
+          {isSyncing && (!history || history.length === 0) ? (
+            <div className="text-center py-10 px-4 bg-white rounded-2xl border border-dashed border-rose-200">
+              <Loader2 className="w-8 h-8 animate-spin text-rose-600 mx-auto mb-2" />
+              <h4 className="text-sm font-bold text-slate-800">Đang đồng bộ dữ liệu bài nộp từ Google Sheets...</h4>
+              <p className="text-xs text-slate-500 mt-1">Hệ thống đang quét các địa chỉ IP từ Cột I của datasheet 2.</p>
+            </div>
+          ) : filteredGroups.length === 0 ? (
+            <div className="text-center py-8 sm:py-12 px-4 bg-white rounded-2xl border border-dashed border-slate-300">
+              {(!history || history.length === 0) ? (
                 <>
-                  <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-inner">
-                    <CheckCircle2 className="w-8 h-8" />
+                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mx-auto mb-2">
+                    <RefreshCw className="w-5 h-5" />
                   </div>
-                  <h4 className="text-base font-bold text-slate-800">
-                    Tuyệt vời! Không phát hiện vi phạm trùng lặp IP nào
+                  <h4 className="text-sm font-bold text-slate-800">
+                    Chưa tải được dữ liệu bài nộp
                   </h4>
-                  <p className="text-xs text-slate-500 mt-1.5 max-w-md mx-auto leading-relaxed">
-                    Tất cả các bài thi đã nộp đều xuất phát từ các địa chỉ IP / thiết bị máy tính độc lập (mỗi máy chỉ làm bài 1 lần duy nhất).
+                  <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                    Thiết bị chưa nhận được danh sách bài nộp từ Google Sheets.
+                  </p>
+                  {onRefreshFromSheet && (
+                    <button
+                      onClick={onRefreshFromSheet}
+                      disabled={isSyncing}
+                      className="mt-3 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                      <span>{isSyncing ? 'Đang tải...' : 'Tải dữ liệu từ Google Sheets ngay'}</span>
+                    </button>
+                  )}
+                </>
+              ) : violationGroups.length === 0 ? (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-2 shadow-inner">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800">
+                    Không phát hiện vi phạm trùng lặp IP nào
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                    Tất cả các bài thi đã nộp đều xuất phát từ các thiết bị / IP độc lập.
                   </p>
                 </>
               ) : (
                 <>
-                  <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-3 shadow-inner">
-                    <Filter className="w-8 h-8" />
+                  <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-2 shadow-inner">
+                    <Filter className="w-5 h-5" />
                   </div>
-                  <h4 className="text-base font-bold text-slate-800">
-                    Không tìm thấy IP vi phạm phù hợp với bộ lọc
+                  <h4 className="text-sm font-bold text-slate-800">
+                    Không tìm thấy IP vi phạm phù hợp
                   </h4>
                   <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                    Vui lòng thử thay đổi từ khóa tìm kiếm hoặc chọn tab bộ lọc khác.
+                    Vui lòng đổi từ khóa tìm kiếm hoặc chọn tab khác.
                   </p>
                 </>
               )}
@@ -348,19 +384,19 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
               return (
                 <div
                   key={group.ipAddress}
-                  className="bg-white rounded-2xl border-2 border-rose-200/80 shadow-xs hover:shadow-md transition-all overflow-hidden"
+                  className="bg-white rounded-xl sm:rounded-2xl border border-rose-200/90 shadow-2xs hover:shadow-xs transition-all overflow-hidden"
                 >
                   {/* IP Group Header */}
-                  <div className="bg-gradient-to-r from-rose-50/90 via-amber-50/60 to-white px-5 py-3.5 border-b border-rose-100 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="w-7 h-7 rounded-xl bg-rose-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+                  <div className="bg-gradient-to-r from-rose-50/90 via-amber-50/60 to-white px-3 py-2 sm:px-5 sm:py-3 border-b border-rose-100 flex flex-wrap items-center justify-between gap-1.5 sm:gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                      <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg sm:rounded-xl bg-rose-600 text-white flex items-center justify-center text-[11px] sm:text-xs font-bold shadow-xs flex-shrink-0">
                         #{groupIdx + 1}
                       </span>
 
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm sm:text-base font-extrabold text-slate-900 font-mono tracking-tight flex items-center gap-1.5">
-                            <Monitor className="w-4 h-4 text-rose-600" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs sm:text-base font-extrabold text-slate-900 font-mono tracking-tight flex items-center gap-1">
+                            <Monitor className="w-3.5 h-3.5 text-rose-600" />
                             {group.ipAddress}
                           </span>
 
@@ -372,53 +408,98 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                             {copiedIp === group.ipAddress ? (
                               <Check className="w-3.5 h-3.5 text-emerald-600" />
                             ) : (
-                              <Copy className="w-3.5 h-3.5" />
+                              <Copy className="w-3 h-3" />
                             )}
                           </button>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-600">
+                        <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-slate-600 mt-0.5">
                           <span>
-                            Lớp liên quan:{' '}
-                            <strong className="text-slate-800 font-semibold">
-                              {group.classNames.join(', ') || 'Chưa rõ lớp'}
-                            </strong>
+                            Lớp: <strong className="text-slate-800">{group.classNames.join(', ') || 'Chưa rõ'}</strong>
                           </span>
                           <span>•</span>
-                          <span>
-                            Học sinh:{' '}
-                            <strong className="text-slate-800 font-semibold">
-                              {group.studentNames.join('; ')}
-                            </strong>
+                          <span className="truncate max-w-[180px] sm:max-w-none">
+                            HS: <strong className="text-slate-800">{group.studentNames.join('; ')}</strong>
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1 sm:gap-2">
                       {isSameStudent ? (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
-                          <UserCheck className="w-3.5 h-3.5" />
+                        <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                          <UserCheck className="w-3 h-3" />
                           1 HS làm lại ({group.submissionCount} lần)
                         </span>
                       ) : (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
-                          <Users className="w-3.5 h-3.5" />
-                          Dùng chung máy ({group.uniqueStudentsCount} HS)
+                        <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
+                          <Users className="w-3 h-3" />
+                          Chung máy ({group.uniqueStudentsCount} HS)
                         </span>
                       )}
 
                       {hasScoreImprovement && isSameStudent && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
                           <TrendingUp className="w-3 h-3 text-emerald-700" />
-                          Điểm tăng: {group.minScore} ➔ {group.maxScore}
+                          {group.minScore} ➔ {group.maxScore}đ
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Submissions Table under this IP */}
-                  <div className="overflow-x-auto">
+                  {/* 1. Mobile Card View: Hiển thị gọn gàng trên điện thoại */}
+                  <div className="sm:hidden divide-y divide-slate-100">
+                    {group.submissions.map((sub, sIdx) => {
+                      const score = Number(sub.totalScore) || 0;
+                      const scoreColor =
+                        score >= 8
+                          ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                          : score >= 5
+                          ? 'text-sky-700 bg-sky-50 border-sky-200'
+                          : 'text-rose-700 bg-rose-50 border-rose-200';
+
+                      return (
+                        <div key={`${sub.studentName}-${sub.className}-${sIdx}`} className="p-2.5 flex items-center justify-between gap-2 hover:bg-slate-50">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 flex-shrink-0">
+                              {sIdx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-xs text-slate-900 truncate">{sub.studentName}</span>
+                                <span className="text-[10px] font-semibold text-slate-600 px-1.5 py-0.2 rounded bg-slate-100 border border-slate-200">
+                                  {sub.className}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                <Clock className="w-2.5 h-2.5 text-slate-400" />
+                                <span>{sub.endTime || sub.startTime || 'Chưa ghi nhận'}</span>
+                                {sub.totalDuration && <span>• {sub.totalDuration}</span>}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <span className={`px-2 py-0.5 rounded-full font-black text-xs border ${scoreColor}`}>
+                              {score}đ
+                            </span>
+                            {onSelectSubmission && (
+                              <button
+                                onClick={() => onSelectSubmission(sub)}
+                                className="p-1 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 transition-colors"
+                                title="Xem bài"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* 2. Desktop Table View: Hiển thị đầy đủ bảng cột trên máy tính */}
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
                         <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200 font-semibold">
@@ -495,14 +576,14 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                   </div>
 
                   {/* Summary footer note */}
-                  <div className="bg-slate-50/70 px-5 py-2 text-[11px] text-slate-500 border-t border-slate-100 flex items-center justify-between">
-                    <span>
+                  <div className="bg-slate-50/70 px-3 py-1.5 sm:px-5 sm:py-2 text-[10px] sm:text-[11px] text-slate-500 border-t border-slate-100 flex items-center justify-between">
+                    <span className="truncate">
                       {isSameStudent
-                        ? `* Học sinh ${group.studentNames[0]} đã làm lại ${group.submissionCount} lần từ máy tính này.`
-                        : `* Có ${group.uniqueStudentsCount} học sinh khác nhau (${group.studentNames.join(', ')}) đã nộp bài từ cùng 1 địa chỉ IP này.`}
+                        ? `* HS ${group.studentNames[0]} làm lại ${group.submissionCount} lần.`
+                        : `* Có ${group.uniqueStudentsCount} HS nộp bài từ cùng 1 IP này.`}
                     </span>
-                    <span className="font-semibold text-slate-600">
-                      Tổng {group.submissionCount} bài làm
+                    <span className="font-semibold text-slate-600 flex-shrink-0 ml-2">
+                      {group.submissionCount} bài làm
                     </span>
                   </div>
                 </div>
@@ -512,25 +593,25 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs flex-shrink-0">
-          <div className="text-slate-500">
-            Tổng cộng: <strong className="text-slate-800">{totalViolatingIps}</strong> IP vi phạm (
-            <strong className="text-rose-700">{totalViolatingSubmissions}</strong> bài làm liên quan)
+        <div className="px-3 py-2 sm:px-4 sm:py-3 bg-white border-t border-slate-200 flex items-center justify-between gap-2 text-[11px] sm:text-xs flex-shrink-0">
+          <div className="text-slate-500 truncate">
+            Tổng: <strong className="text-slate-800">{totalViolatingIps}</strong> IP (
+            <strong className="text-rose-700">{totalViolatingSubmissions}</strong> bài nộp)
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             {violationGroups.length > 0 && (
               <button
                 onClick={handleExportExcel}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Tải Báo Cáo Excel</span>
+                <Download className="w-3 h-3" />
+                <span className="hidden sm:inline">Xuất Excel</span>
               </button>
             )}
             <button
               onClick={onClose}
-              className="px-5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+              className="px-3 py-1 sm:px-4 sm:py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
             >
               Đóng
             </button>

@@ -65,28 +65,27 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="p-6 bg-gradient-to-r from-sky-600 via-sky-700 to-blue-700 text-white relative">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+        {/* Header - Thu gọn & Xoá chú thích */}
+        <div className="px-4 py-3 sm:px-6 sm:py-4.5 bg-gradient-to-r from-sky-600 via-sky-700 to-blue-700 text-white relative">
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
+            className="absolute top-2.5 right-2.5 sm:top-4 sm:right-4 p-1.5 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
             title="Đóng"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
-          <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center mb-3 border border-white/20 shadow-inner">
-            <Lock className="w-6 h-6 text-white" />
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner flex-shrink-0">
+              <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+            </div>
+            <h3 className="text-sm sm:text-lg font-bold tracking-tight">Xác Thực Quản Trị Viên</h3>
           </div>
-          <h3 className="text-xl font-bold tracking-tight">Xác thực Quyền Quản trị viên</h3>
-          <p className="text-sky-100 text-xs mt-1">
-            Khu vực dành cho Quản trị viên & Giáo viên bộ môn
-          </p>
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-3.5 sm:space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
               Nhập mật khẩu truy cập

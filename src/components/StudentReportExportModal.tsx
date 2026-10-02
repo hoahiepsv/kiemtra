@@ -68,7 +68,8 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
   // Modal xác nhận xóa học sinh
   const [studentToDelete, setStudentToDelete] = useState<SubmissionRecord | null>(null);
 
-  const getStudentKey = (s: SubmissionRecord) => `${s.stt ?? ''}_${String(s.studentName || '')}_${String(s.className || '')}`;
+  const getStudentKey = (s: SubmissionRecord) =>
+    `${s.stt ?? ''}_${String(s.studentName || '').toLowerCase().trim()}_${String(s.className || '').toLowerCase().trim()}_${s.endTime || ''}_${s.timestamp || ''}`;
 
   const handleSavePreviewStudent = async () => {
     if (!previewStudent) return;
@@ -80,8 +81,16 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
 
       setStudents((prev) => {
         let foundIdx = prev.findIndex((s) => getStudentKey(s) === targetKey);
-        if (foundIdx === -1 && previewStudent.stt !== undefined) {
-          foundIdx = prev.findIndex((s) => s.stt === previewStudent.stt);
+        if (foundIdx === -1 && previewStudent.stt !== undefined && previewStudent.stt !== null && Number(previewStudent.stt) > 0) {
+          foundIdx = prev.findIndex((s) => Number(s.stt) === Number(previewStudent.stt));
+        }
+        if (foundIdx === -1 && previewStudent.endTime) {
+          foundIdx = prev.findIndex(
+            (s) =>
+              String(s.studentName || '').toLowerCase().trim() === targetName &&
+              String(s.className || '').toLowerCase().trim() === targetClass &&
+              s.endTime === previewStudent.endTime
+          );
         }
         if (foundIdx === -1) {
           foundIdx = prev.findIndex(
@@ -94,13 +103,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
         if (foundIdx !== -1) {
           const next = [...prev];
           next[foundIdx] = previewStudent;
-          return next.filter((s, idx) => {
-            if (idx === foundIdx) return true;
-            const sameName = String(s.studentName || '').toLowerCase().trim() === targetName;
-            const sameClass = String(s.className || '').toLowerCase().trim() === targetClass;
-            const sameSTT = previewStudent.stt !== undefined && s.stt === previewStudent.stt;
-            return !(sameSTT || (sameName && sameClass));
-          });
+          return next;
         }
         return [previewStudent, ...prev];
       });
@@ -392,95 +395,78 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
   const selectedCount = students.filter((s) => selectedIds.has(getStudentKey(s))).length;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-hidden">
-      <div className="bg-white rounded-3xl max-w-4xl w-full h-[90vh] max-h-[800px] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-700 text-white flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20">
-              <FolderArchive className="w-5 h-5 text-white" />
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-1.5 sm:p-6 overflow-hidden">
+      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-4xl w-full h-[96vh] sm:h-[90vh] max-h-[96vh] sm:max-h-[800px] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Header - Thu gọn & Xoá chú thích */}
+        <div className="px-3 py-2 sm:px-6 sm:py-3.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-700 text-white flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20 flex-shrink-0">
+              <FolderArchive className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
-            <div>
-              <h3 className="font-bold text-base sm:text-lg">
-                Xuất Báo Cáo Học Sinh Dạng File Ảnh
-              </h3>
-              <p className="text-emerald-100 text-xs">
-                Mỗi học sinh 1 file ảnh (PNG). Chọn nhiều học sinh hệ thống sẽ tự động đóng gói file ZIP.
-              </p>
-            </div>
+            <h3 className="font-bold text-xs sm:text-base tracking-tight truncate">
+              Xuất Báo Cáo Học Sinh (PNG / ZIP)
+            </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
-            title="Đóng"
+            className="p-1 sm:p-1.5 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
+            title="Quay lại Bảng Quản trị"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
-        {/* Source info & Search / Filter Toolbar */}
-        <div className="p-4 bg-slate-50 border-b border-slate-200 flex-shrink-0 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-slate-500 font-medium">Nguồn dữ liệu:</span>
-              <span className="px-2.5 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                <FileSpreadsheet className="w-3 h-3" />
-                {loadSource === 'sheet'
-                  ? 'Chính xác từ Cơ sở dữ liệu'
-                  : 'Lịch sử nộp bài trên thiết bị'}
-              </span>
-              <span className="text-slate-500 text-[11px] font-medium">
-                ({students.length} học sinh)
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadStudents}
-                disabled={isLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer transition-colors shadow-2xs"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-emerald-600' : ''}`} />
-                <span>{isLoading ? 'Đang tải...' : 'Lấy từ Cơ sở dữ liệu'}</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Search Input */}
-            <div className="sm:col-span-2 relative">
+        {/* Search, Filter & Actions Toolbar - Tinh gọn 2 hàng */}
+        <div className="px-3 py-2 sm:px-6 sm:py-2.5 bg-slate-50 border-b border-slate-200 flex-shrink-0 space-y-1.5 sm:space-y-2">
+          {/* Hàng 1: Tìm kiếm + Lọc lớp + Nút làm mới từ CSDL */}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+            <div className="relative flex-1 min-w-[150px] sm:min-w-[220px]">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                placeholder="Tìm học sinh theo họ tên hoặc lớp..."
-                className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all"
+                placeholder="Tìm tên học sinh, lớp..."
+                className="w-full pl-8 pr-2.5 py-1 sm:py-1.5 text-xs bg-white border border-slate-200 rounded-lg sm:rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs"
               />
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             </div>
 
-            {/* Class filter */}
-            <div>
+            <div className="w-28 sm:w-44 flex-shrink-0">
               <select
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
-                className="w-full py-2 px-3 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-slate-700 font-medium"
+                className="w-full px-2 py-1 sm:py-1.5 text-xs bg-white border border-slate-200 rounded-lg sm:rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
               >
-                <option value="all">Tất cả các lớp ({students.length})</option>
-                {classOptions.map((cls) => (
-                  <option key={cls} value={cls}>
-                    Lớp {cls}
-                  </option>
-                ))}
+                <option value="ALL">Tất cả lớp ({classOptions.length})</option>
+                {classOptions.map((cls) => {
+                  const count = students.filter(
+                    (s) => (s.className || "").trim().toUpperCase() === cls
+                  ).length;
+                  return (
+                    <option key={cls} value={cls}>
+                      Lớp {cls} ({count})
+                    </option>
+                  );
+                })}
               </select>
             </div>
+
+            <button
+              onClick={loadStudents}
+              disabled={isLoading}
+              className="flex items-center gap-1 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer transition-colors shadow-2xs text-xs flex-shrink-0"
+              title="Lấy dữ liệu bài nộp mới nhất từ CSDL"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-emerald-600" : ""}`} />
+              <span className="hidden sm:inline">{isLoading ? "Đang tải..." : "Lấy từ CSDL"}</span>
+            </button>
           </div>
 
-          {/* Selection counter, Teacher Answer Key Toggle & bulk actions */}
-          <div className="flex flex-wrap items-center justify-between gap-2.5 text-xs pt-2 border-t border-slate-200">
+          {/* Hàng 2: Chọn tất cả + Hiện đáp án đúng + Số lượng đã chọn */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/80 text-xs">
             <button
               onClick={handleSelectAll}
-              className="flex items-center gap-1.5 font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer"
+              className="flex items-center gap-1.5 font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer text-xs"
             >
               {selectedIds.size === filteredStudents.length && filteredStudents.length > 0 ? (
                 <CheckSquare className="w-4 h-4 text-emerald-600" />
@@ -489,48 +475,39 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
               )}
               <span>
                 {selectedIds.size === filteredStudents.length && filteredStudents.length > 0
-                  ? 'Bỏ chọn tất cả'
-                  : `Chọn tất cả (${filteredStudents.length} học sinh)`}
+                  ? "Bỏ chọn tất cả"
+                  : `Chọn tất cả (${filteredStudents.length} HS)`}
               </span>
             </button>
 
-            {/* ĐẶC QUYỀN GIÁO VIÊN: Nút bật/tắt hiện đáp án chuẩn khi xuất phiếu ảnh */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 text-xs">
+              {/* ĐẶC QUYỀN GIÁO VIÊN: Bật/tắt hiện đáp án chuẩn */}
               <label
-                className={`flex items-center gap-2 cursor-pointer select-none px-3 py-1.5 rounded-xl border transition-all ${
+                className={`flex items-center gap-1.5 cursor-pointer select-none px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg border transition-all text-xs font-semibold ${
                   includeCorrectAnswers
-                    ? 'bg-amber-100 border-amber-400 text-amber-950 shadow-xs'
-                    : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+                    ? "bg-amber-100 border-amber-400 text-amber-950 shadow-2xs"
+                    : "bg-white hover:bg-slate-100 border-slate-200 text-slate-700"
                 }`}
-                title="Bật/Tắt hiển thị cột đáp án chuẩn của đề thi trên phiếu ảnh"
+                title="Bật/Tắt hiển thị cột đáp án chuẩn trên phiếu ảnh"
               >
                 <input
                   type="checkbox"
                   checked={includeCorrectAnswers}
                   onChange={(e) => setIncludeCorrectAnswers(e.target.checked)}
-                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer accent-amber-600"
+                  className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500 cursor-pointer accent-amber-600"
                 />
-                <span className="text-xs font-bold flex items-center gap-1.5">
-                  <span className="hidden xs:inline">Hiện đáp án đúng</span>
-                  <span className="xs:hidden">Hiện Đ/A</span>
-                  {includeCorrectAnswers ? (
-                    <span className="text-[10px] bg-amber-600 text-white px-1.5 py-0.5 rounded font-black">BẬT</span>
-                  ) : (
-                    <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-medium">TẮT</span>
-                  )}
-                </span>
+                <span className="text-[11px] sm:text-xs">Hiện Đ/A đúng</span>
               </label>
 
-              <span className="font-medium text-slate-600 hidden md:inline">
-                Đã chọn: <strong className="text-emerald-700 font-bold">{selectedCount}</strong> /{' '}
-                {filteredStudents.length} học sinh
+              <span className="text-slate-500 text-[11px] sm:text-xs">
+                Đã chọn: <strong className="text-emerald-700 font-bold">{selectedCount}</strong>/{filteredStudents.length}
               </span>
             </div>
           </div>
         </div>
 
         {/* Student Table List */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-2 sm:p-4">
           {filteredStudents.length === 0 ? (
             <div className="text-center py-16 px-4 bg-white rounded-2xl border border-dashed border-slate-300">
               <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3">
@@ -564,20 +541,20 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                 return (
                   <div
                     key={key}
-                    className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                    className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 ${
                       isSelected
-                        ? 'bg-emerald-50/40 border-emerald-300 shadow-2xs'
+                        ? 'bg-emerald-50/50 border-emerald-400 shadow-2xs'
                         : 'bg-white border-slate-200 hover:bg-slate-50'
                     }`}
                   >
-                    {/* Checkbox & Student Name */}
+                    {/* Checkbox & Student Name & Class - Luôn thấy rõ ràng đầy đủ trên mobile */}
                     <div
                       onClick={() => handleToggleSelect(key)}
-                      className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+                      className="flex items-start sm:items-center gap-2.5 sm:gap-3 cursor-pointer flex-1 min-w-0"
                     >
                       <button
                         type="button"
-                        className="text-emerald-600 flex-shrink-0 cursor-pointer"
+                        className="text-emerald-600 flex-shrink-0 cursor-pointer mt-0.5 sm:mt-0"
                       >
                         {isSelected ? (
                           <CheckSquare className="w-5 h-5 fill-emerald-100 text-emerald-600" />
@@ -586,63 +563,67 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                         )}
                       </button>
 
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-800 truncate">
+                      <div className="min-w-0 flex-1">
+                        {/* HỌ VÀ TÊN + LỚP HỌC SINH */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-extrabold text-sm sm:text-base text-slate-900 leading-tight">
                             {student.studentName}
                           </span>
-                          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                            {student.className}
+                          <span className="px-2 py-0.5 rounded-md text-[11px] sm:text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex-shrink-0">
+                            Lớp {student.className}
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 font-mono">
-                          <span>Bắt đầu: {formatExamDateTime(student.startTime || (student.totalDuration?.includes('T') ? student.totalDuration : '')) || '17:02'}</span>
-                          <span>Nộp: {formatExamDateTime(student.endTime) || '17:04'}</span>
+                        <div className="text-[10px] sm:text-[11px] text-slate-500 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-1 font-mono">
+                          <span>Nộp: {formatExamDateTime(student.endTime) || 'Chưa rõ'}</span>
+                          <span className="hidden xs:inline">•</span>
                           <span>Thời lượng: {formatExamDuration(student.totalDuration, student.startTime, student.endTime)}</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Score Badge */}
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <div className="text-right">
-                        <span className="text-base font-extrabold text-sky-900 block leading-none">
-                          {student.totalScore}
-                          <span className="text-xs font-normal text-slate-400">/{student.maxScore || 10}</span>
+                    {/* Score Badge & Action buttons - Tách thành hàng dưới tiện thao tác trên mobile */}
+                    <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 flex-shrink-0">
+                      <div className="flex items-center sm:text-right gap-1.5 sm:gap-0 sm:block">
+                        <span className="text-base sm:text-lg font-black text-rose-600 font-serif leading-none">
+                          {String(student.totalScore).replace('.', ',')}
+                          <span className="text-[10px] sm:text-xs font-normal text-slate-400 font-sans ml-0.5">/{student.maxScore || 10}đ</span>
                         </span>
-                        <span className="text-[10px] text-slate-400 font-medium">Tổng điểm</span>
+                        <span className="text-[10px] text-slate-400 font-medium hidden sm:block">Tổng điểm</span>
                       </div>
 
                       {/* Action buttons per student */}
-                      <button
-                        onClick={() => setPreviewStudent(student)}
-                        className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-sky-600 border border-slate-200 transition-colors cursor-pointer"
-                        title="Xem trước phiếu báo cáo"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setPreviewStudent(student)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg sm:rounded-xl text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition-colors cursor-pointer active:scale-95"
+                          title="Xem trước phiếu báo cáo"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Xem trước</span>
+                        </button>
 
-                      <button
-                        onClick={() => handleExportSingle(student)}
-                        disabled={isExporting}
-                        className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors cursor-pointer"
-                        title="Tải riêng ảnh của học sinh này"
-                      >
-                        <ImageIcon className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Tải ảnh</span>
-                      </button>
+                        <button
+                          onClick={() => handleExportSingle(student)}
+                          disabled={isExporting}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg sm:rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors cursor-pointer active:scale-95 disabled:opacity-50"
+                          title="Tải riêng ảnh của học sinh này"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span className="hidden xs:inline">Tải ảnh</span>
+                        </button>
 
-                      {/* Delete single student button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setStudentToDelete(student);
-                        }}
-                        className="p-2 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 border border-slate-200 transition-colors cursor-pointer"
-                        title="Xóa học sinh này khỏi danh sách"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                        {/* Delete single student button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setStudentToDelete(student);
+                          }}
+                          className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 border border-slate-200 transition-colors cursor-pointer"
+                          title="Xóa học sinh này khỏi danh sách"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -652,23 +633,18 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
         </div>
 
         {/* Footer sticky bar */}
-        <div className="p-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
-          <div className="text-xs text-slate-600">
+        <div className="px-3 py-2 sm:px-6 sm:py-2.5 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs flex-shrink-0">
+          <div className="text-[11px] sm:text-xs text-slate-600 truncate">
             <span>
               Đã chọn: <strong className="text-slate-900">{selectedCount}</strong> học sinh.
-            </span>{' '}
-            {selectedCount > 1 && (
-              <span className="text-emerald-700 font-semibold">
-                Sẽ tự động nén thành 1 file ZIP duy nhất chứa toàn bộ {selectedCount} ảnh.
-              </span>
-            )}
+            </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={onClose}
               disabled={isExporting}
-              className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200"
+              className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200"
             >
               Đóng
             </button>
@@ -676,7 +652,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
             <button
               onClick={handleMainExport}
               disabled={selectedCount === 0 || isExporting}
-              className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white flex items-center gap-2 shadow-md transition-all cursor-pointer ${
+              className={`px-3 py-1.5 sm:px-5 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold text-white flex items-center gap-1.5 shadow-xs transition-all cursor-pointer ${
                 selectedCount === 0 || isExporting
                   ? 'bg-slate-300 cursor-not-allowed shadow-none'
                   : selectedCount === 1
@@ -688,13 +664,13 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                 <span>Chưa chọn học sinh</span>
               ) : selectedCount === 1 ? (
                 <>
-                  <ImageIcon className="w-4 h-4" />
-                  <span>Tải 1 ảnh báo cáo (PNG)</span>
+                  <ImageIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>Tải 1 ảnh (PNG)</span>
                 </>
               ) : (
                 <>
-                  <FolderArchive className="w-4 h-4" />
-                  <span>Tải file nén ZIP ({selectedCount} học sinh)</span>
+                  <FolderArchive className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>Tải ZIP ({selectedCount} HS)</span>
                 </>
               )}
             </button>
@@ -750,7 +726,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
 
       {/* Single Student Preview Modal */}
       {previewStudent && (
-        <div className="fixed inset-0 z-60 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-60 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-1.5 sm:p-4">
           {/* Nút mũi tên TRÁI - Học sinh trước (bên trái) */}
           {filteredStudents.length > 1 && (
             <button
@@ -758,7 +734,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
               onClick={() => navigatePreview(prevPreviewStudent)}
               disabled={!hasPrevPreview}
               aria-label="Học sinh trước"
-              className={`fixed left-2 sm:left-4 md:left-6 top-1/2 -translate-y-1/2 z-70 w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-emerald-600 shadow-2xl border-2 border-slate-200/80 transition-all flex items-center justify-center ${
+              className={`fixed left-1.5 sm:left-4 md:left-6 top-1/2 -translate-y-1/2 z-70 w-9 h-9 sm:w-14 sm:h-14 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-emerald-600 shadow-2xl border-2 border-slate-200/80 transition-all flex items-center justify-center ${
                 !hasPrevPreview
                   ? 'opacity-25 cursor-not-allowed pointer-events-none'
                   : 'cursor-pointer hover:scale-110 active:scale-95 hover:border-emerald-400'
@@ -769,7 +745,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                   : 'Không có học sinh trước'
               }
             >
-              <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8 stroke-[2.5]" />
+              <ChevronLeft className="w-5 h-5 sm:w-8 sm:h-8 stroke-[2.5]" />
             </button>
           )}
 
@@ -780,7 +756,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
               onClick={() => navigatePreview(nextPreviewStudent)}
               disabled={!hasNextPreview}
               aria-label="Học sinh kế tiếp"
-              className={`fixed right-2 sm:right-4 md:right-6 top-1/2 -translate-y-1/2 z-70 w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-emerald-600 shadow-2xl border-2 border-slate-200/80 transition-all flex items-center justify-center ${
+              className={`fixed right-1.5 sm:right-4 md:right-6 top-1/2 -translate-y-1/2 z-70 w-9 h-9 sm:w-14 sm:h-14 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-emerald-600 shadow-2xl border-2 border-slate-200/80 transition-all flex items-center justify-center ${
                 !hasNextPreview
                   ? 'opacity-25 cursor-not-allowed pointer-events-none'
                   : 'cursor-pointer hover:scale-110 active:scale-95 hover:border-emerald-400'
@@ -791,37 +767,39 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                   : 'Không có học sinh sau'
               }
             >
-              <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8 stroke-[2.5]" />
+              <ChevronRight className="w-5 h-5 sm:w-8 sm:h-8 stroke-[2.5]" />
             </button>
           )}
 
-          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-5 py-3 bg-slate-800 text-white flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs font-semibold truncate">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[94vh] sm:max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-3 py-2 sm:px-5 sm:py-3 bg-slate-800 text-white flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <Eye className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span className="truncate">Xem trước ảnh phiếu báo cáo: {previewStudent.studentName} ({previewStudent.className})</span>
+                <span className="font-bold text-xs truncate">
+                  {previewStudent.studentName} &bull; Lớp {previewStudent.className}
+                </span>
               </div>
 
               {/* Thanh chuyển nhanh học sinh trên Header */}
               {filteredStudents.length > 1 && previewIndex !== -1 && (
-                <div className="flex items-center gap-1.5 bg-slate-700/80 px-2.5 py-1 rounded-lg border border-slate-600 text-xs">
+                <div className="flex items-center gap-1 bg-slate-700/80 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg border border-slate-600 text-xs flex-shrink-0">
                   <button
                     type="button"
                     onClick={() => navigatePreview(prevPreviewStudent)}
                     disabled={!hasPrevPreview}
-                    className="p-1 rounded-md hover:bg-slate-600 text-slate-300 hover:text-white disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                    className="p-0.5 sm:p-1 rounded-md hover:bg-slate-600 text-slate-300 hover:text-white disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
                     title="Học sinh trước (Phím ←)"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
                   </button>
-                  <span className="font-semibold text-slate-200 text-[11px] px-1 select-none">
+                  <span className="font-semibold text-slate-200 text-[10px] sm:text-[11px] px-0.5 sm:px-1 select-none">
                     HS <strong className="text-white font-bold">{previewIndex + 1}</strong>/{filteredStudents.length}
                   </span>
                   <button
                     type="button"
                     onClick={() => navigatePreview(nextPreviewStudent)}
                     disabled={!hasNextPreview}
-                    className="p-1 rounded-md hover:bg-slate-600 text-slate-300 hover:text-white disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                    className="p-0.5 sm:p-1 rounded-md hover:bg-slate-600 text-slate-300 hover:text-white disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
                     title="Học sinh kế tiếp (Phím →)"
                   >
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -829,15 +807,15 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                 </div>
               )}
 
-              <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                <label className="flex items-center gap-1.5 text-xs text-amber-200 cursor-pointer bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg border border-slate-600 transition-colors select-none">
+              <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+                <label className="flex items-center gap-1 text-xs text-amber-200 cursor-pointer bg-slate-700 hover:bg-slate-600 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg border border-slate-600 transition-colors select-none">
                   <input
                     type="checkbox"
                     checked={includeCorrectAnswers}
                     onChange={(e) => setIncludeCorrectAnswers(e.target.checked)}
                     className="w-3.5 h-3.5 rounded text-amber-500 cursor-pointer accent-amber-500"
                   />
-                  <span className="font-semibold text-[11px] sm:text-xs">Hiện đáp án</span>
+                  <span className="font-semibold text-[10px] sm:text-xs">Hiện Đ/A</span>
                 </label>
                 <button
                   onClick={() => setPreviewStudent(null)}
@@ -849,8 +827,8 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 bg-slate-100 flex justify-center">
-              <div className="scale-[0.85] origin-top">
+            <div className="flex-1 overflow-y-auto p-2 sm:p-4 bg-slate-100 flex justify-center">
+              <div className="scale-[0.45] xs:scale-[0.6] sm:scale-[0.85] origin-top">
                 <StudentReportCard
                   submission={previewStudent}
                   config={config}

@@ -42,233 +42,181 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
   }, [violatingGroups]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-2xl sm:max-w-3xl w-full shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="p-6 bg-gradient-to-r from-sky-600 via-sky-700 to-blue-700 text-white relative">
+        <div className="px-4 py-3 sm:px-6 sm:py-4 bg-gradient-to-r from-sky-600 via-sky-700 to-blue-700 text-white relative">
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
+            className="absolute top-2.5 right-2.5 sm:top-4 sm:right-4 p-1.5 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
             title="Đóng"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
           
-          {session?.role === 'subadmin' ? (
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/30 backdrop-blur-md text-emerald-100 text-xs font-semibold w-fit mb-2 border border-emerald-300/40">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-200" />
-              <span>Đã xác thực: {session.name} (Quyền tạo đề & xuất báo cáo)</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-sky-100 text-xs font-semibold w-fit mb-2 border border-white/20">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
-              <span>Đã xác thực quyền Cấp cao: Lê Hoà Hiệp</span>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-1.5 mb-1">
+            {session?.role === 'subadmin' ? (
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/30 backdrop-blur-md text-emerald-100 text-[10px] sm:text-xs font-semibold border border-emerald-300/40">
+                <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-200" />
+                <span>Đã xác thực: {session.name}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-sky-100 text-[10px] sm:text-xs font-semibold border border-white/20">
+                <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-300" />
+                <span>Quyền Cấp cao: Lê Hoà Hiệp</span>
+              </div>
+            )}
+          </div>
 
-          <h3 className="text-xl sm:text-2xl font-bold tracking-tight">Bảng Điều Khiển Quản Trị</h3>
-          <p className="text-sky-100 text-xs sm:text-sm mt-1">
-            Vui lòng chọn tính năng quản trị cần thực hiện:
-          </p>
+          <h3 className="text-base sm:text-xl font-bold tracking-tight">Bảng Điều Khiển Quản Trị</h3>
         </div>
 
-        {/* Options Selection Grid */}
-        <div className="p-6 space-y-3.5 max-h-[75vh] overflow-y-auto">
+        {/* Options Selection List - Compact & No Subtitles */}
+        <div className="p-2.5 sm:p-5 space-y-2 sm:space-y-2.5 max-h-[82vh] overflow-y-auto">
           {/* Option 1: Tạo & Chỉnh sửa đề thi */}
           <button
-            onClick={() => {
-              onClose();
-              onSelectExamEditor();
-            }}
-            className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-indigo-100 hover:border-indigo-500 bg-indigo-50/40 hover:bg-indigo-50/80 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
+            onClick={onSelectExamEditor}
+            className="w-full text-left px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-xl border border-indigo-100 hover:border-indigo-500 bg-indigo-50/40 hover:bg-indigo-50/80 transition-all group flex items-center justify-between gap-2.5 sm:gap-3 cursor-pointer shadow-xs hover:shadow-sm"
           >
-            <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-indigo-600/20 group-hover:scale-105 transition-transform">
-              <FileEdit className="w-6 h-6" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-indigo-700 transition-colors">
-                  1. Tạo & Chỉnh sửa đề thi
-                </h4>
-                <span className="text-indigo-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
-                  <ArrowRight className="w-4 h-4" />
-                </span>
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-indigo-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                <FileEdit className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                Thay đổi tên trường, môn học, thời gian, tên kỳ kiểm tra; thêm / bớt câu hỏi, chọn loại trắc nghiệm hay tự luận, chọn đáp án đúng và phân bổ thang điểm.
-              </p>
+              <h4 className="text-xs sm:text-base font-bold text-slate-800 group-hover:text-indigo-700 transition-colors truncate">
+                1. Tạo & Chỉnh sửa đề thi
+              </h4>
             </div>
+            <span className="text-indigo-600 group-hover:translate-x-1 transition-transform flex-shrink-0">
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </span>
           </button>
 
           {/* Option 2: Xuất báo cáo HS dạng file ảnh */}
           <button
-            onClick={() => {
-              onClose();
-              onSelectExportImage();
-            }}
-            className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-emerald-100 hover:border-emerald-500 bg-emerald-50/40 hover:bg-emerald-50/80 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
+            onClick={onSelectExportImage}
+            className="w-full text-left px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-xl border border-emerald-100 hover:border-emerald-500 bg-emerald-50/40 hover:bg-emerald-50/80 transition-all group flex items-center justify-between gap-2.5 sm:gap-3 cursor-pointer shadow-xs hover:shadow-sm"
           >
-            <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-emerald-600/20 group-hover:scale-105 transition-transform">
-              <FolderArchive className="w-6 h-6" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">
-                  2. Xuất báo cáo HS dạng file ảnh (PNG / ZIP)
-                </h4>
-                <span className="text-emerald-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
-                  <ArrowRight className="w-4 h-4" />
-                </span>
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                <FolderArchive className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                Lựa chọn học sinh xuất báo cáo dạng file ảnh chất lượng cao. Mỗi file là 1 học sinh; khi chọn nhiều học sinh hệ thống tự động nén thành file ZIP tải về máy tiện lợi.
-              </p>
+              <h4 className="text-xs sm:text-base font-bold text-slate-800 group-hover:text-emerald-700 transition-colors truncate">
+                2. Xuất báo cáo học sinh dạng file ảnh (PNG / ZIP)
+              </h4>
             </div>
+            <span className="text-emerald-600 group-hover:translate-x-1 transition-transform flex-shrink-0">
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </span>
           </button>
 
           {/* Option 3: Xuất kết quả theo lớp dạng file *.xlsx */}
           <button
-            onClick={() => {
-              onClose();
-              onSelectExportExcel();
-            }}
-            className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-teal-100 hover:border-teal-500 bg-teal-50/40 hover:bg-teal-50/80 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
+            onClick={onSelectExportExcel}
+            className="w-full text-left px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-xl border border-teal-100 hover:border-teal-500 bg-teal-50/40 hover:bg-teal-50/80 transition-all group flex items-center justify-between gap-2.5 sm:gap-3 cursor-pointer shadow-xs hover:shadow-sm"
           >
-            <div className="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-teal-600/20 group-hover:scale-105 transition-transform">
-              <FileSpreadsheet className="w-6 h-6" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-teal-700 transition-colors">
-                  3. Xuất kết quả theo lớp dạng file *.xlsx
-                </h4>
-                <span className="text-teal-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
-                  <ArrowRight className="w-4 h-4" />
-                </span>
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-teal-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                Tổng hợp bảng điểm học sinh theo từng lớp học xuất file Microsoft Excel (*.xlsx), kèm điểm số, xếp loại học lực và phân tích từng câu hỏi.
-              </p>
+              <h4 className="text-xs sm:text-base font-bold text-slate-800 group-hover:text-teal-700 transition-colors truncate">
+                3. Xuất kết quả theo lớp dạng file Microsoft Excel (*.xlsx)
+              </h4>
             </div>
+            <span className="text-teal-600 group-hover:translate-x-1 transition-transform flex-shrink-0">
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </span>
           </button>
 
-          {/* Option 4: Lịch sử nộp bài (Lấy từ Cơ sở dữ liệu) */}
+          {/* Option 4: Lịch sử nộp bài */}
           <button
-            onClick={() => {
-              onClose();
-              onSelectHistory();
-            }}
-            className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-sky-100 hover:border-sky-500 bg-sky-50/40 hover:bg-sky-50/80 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
+            onClick={onSelectHistory}
+            className="w-full text-left px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-xl border border-sky-100 hover:border-sky-500 bg-sky-50/40 hover:bg-sky-50/80 transition-all group flex items-center justify-between gap-2.5 sm:gap-3 cursor-pointer shadow-xs hover:shadow-sm"
           >
-            <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-sky-600/20 group-hover:scale-105 transition-transform">
-              <History className="w-6 h-6" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-sky-700 transition-colors">
-                  4. Lịch sử nộp bài (Lấy từ Cơ sở dữ liệu)
-                </h4>
-                <span className="text-sky-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
-                  <ArrowRight className="w-4 h-4" />
-                </span>
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-sky-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                <History className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                Xem toàn bộ bài nộp của học sinh được tự động lấy từ Cơ sở dữ liệu sau khi giáo viên đăng nhập; tra cứu điểm số và xem phiếu bài thi.
-              </p>
+              <h4 className="text-xs sm:text-base font-bold text-slate-800 group-hover:text-sky-700 transition-colors truncate">
+                4. Lịch sử nộp bài (Từ Cơ sở dữ liệu)
+              </h4>
             </div>
+            <span className="text-sky-600 group-hover:translate-x-1 transition-transform flex-shrink-0">
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </span>
           </button>
 
-          {/* Option 5: Cảnh báo vi phạm (Nghi vấn trùng lặp IP) */}
+          {/* Option 5: Cảnh báo vi phạm (Trùng lặp IP) */}
           <button
-            onClick={() => {
-              onClose();
-              onSelectViolationWarning?.();
-            }}
-            className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-rose-200 hover:border-rose-500 bg-rose-50/50 hover:bg-rose-50/90 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
+            onClick={() => onSelectViolationWarning?.()}
+            className="w-full text-left px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-xl border border-rose-200 hover:border-rose-500 bg-rose-50/50 hover:bg-rose-50/90 transition-all group flex items-center justify-between gap-2.5 sm:gap-3 cursor-pointer shadow-xs hover:shadow-sm"
           >
-            <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-rose-600/20 group-hover:scale-105 transition-transform">
-              <ShieldAlert className="w-6 h-6" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-rose-700 transition-colors">
-                    5. Cảnh báo vi phạm (Trùng lặp IP)
-                  </h4>
-                  {violatingIpStats.count > 0 ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white shadow-xs animate-pulse">
-                      {violatingIpStats.count} IP làm trên 1 lần
-                    </span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-300">
-                      An toàn (0 vi phạm)
-                    </span>
-                  )}
-                </div>
-                <span className="text-rose-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
-                  <ArrowRight className="w-4 h-4" />
-                </span>
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-rose-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                <ShieldAlert className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                Kiểm duyệt và cho biết máy tính / địa chỉ IP đã làm bài từ 2 lần trở lên: liệt kê rõ IP đó đã làm cho những tên học sinh nào, lớp nào, số điểm từng lần làm bài.
-              </p>
+              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                <h4 className="text-xs sm:text-base font-bold text-slate-800 group-hover:text-rose-700 transition-colors truncate">
+                  5. Cảnh báo vi phạm (Trùng lặp IP)
+                </h4>
+                {violatingIpStats.count > 0 ? (
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-rose-600 text-white shadow-xs animate-pulse">
+                    {violatingIpStats.count} IP trùng
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-300">
+                    An toàn
+                  </span>
+                )}
+              </div>
             </div>
+            <span className="text-rose-600 group-hover:translate-x-1 transition-transform flex-shrink-0">
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </span>
           </button>
 
-          {/* Option 6: Tạo Apps Script (Conditional) */}
+          {/* Option 6: Bộ mã Google Apps Script & CSDL */}
           {canManageAppsScript ? (
             <button
-              onClick={() => {
-                onClose();
-                onSelectAppsScript();
-              }}
-              className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-slate-100 hover:border-sky-500 bg-slate-50/50 hover:bg-sky-50/50 transition-all group flex items-start gap-4 cursor-pointer shadow-xs hover:shadow-md"
+              onClick={onSelectAppsScript}
+              className="w-full text-left px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-xl border border-slate-200 hover:border-sky-500 bg-slate-50/60 hover:bg-sky-50/60 transition-all group flex items-center justify-between gap-2.5 sm:gap-3 cursor-pointer shadow-xs hover:shadow-sm"
             >
-              <div className="w-12 h-12 rounded-2xl bg-slate-700 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-slate-700/20 group-hover:scale-105 transition-transform">
-                <FileCode2 className="w-6 h-6" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <h4 className="text-base sm:text-lg font-bold text-slate-800 group-hover:text-sky-700 transition-colors">
-                    6. Tạo Apps Script...
-                  </h4>
-                  <span className="text-sky-600 group-hover:translate-x-1 transition-transform flex-shrink-0 mt-1">
-                    <ArrowRight className="w-4 h-4" />
-                  </span>
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-slate-700 text-white flex items-center justify-center flex-shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                  <FileCode2 className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
-                <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
-                  Cấu hình liên kết Google Sheets (data1, data2); sao chép mã Apps Script tự động đồng bộ đề thi, quản lý ngân hàng câu hỏi và tiếp nhận điểm số trực tiếp.
-                </p>
+                <h4 className="text-xs sm:text-base font-bold text-slate-800 group-hover:text-sky-700 transition-colors truncate">
+                  6. Bộ mã Google Apps Script & Cấu hình CSDL
+                </h4>
               </div>
+              <span className="text-sky-600 group-hover:translate-x-1 transition-transform flex-shrink-0">
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </span>
             </button>
           ) : (
-            <div className="w-full text-left p-4 sm:p-5 rounded-2xl border-2 border-slate-200 bg-slate-50/80 flex items-start gap-4 opacity-75 select-none cursor-not-allowed">
-              <div className="w-12 h-12 rounded-2xl bg-slate-300 text-slate-600 flex items-center justify-center flex-shrink-0">
-                <Lock className="w-6 h-6" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-base font-bold text-slate-500">
-                    6. Cấu hình Google Sheets & Apps Script
+            <div className="w-full text-left px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-xl border border-slate-200 bg-slate-50/80 flex items-center justify-between gap-2.5 sm:gap-3 opacity-75 select-none cursor-not-allowed">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-slate-300 text-slate-600 flex items-center justify-center flex-shrink-0">
+                  <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+                <div className="flex items-center gap-1.5 truncate">
+                  <h4 className="text-xs sm:text-base font-bold text-slate-500 truncate">
+                    6. Bộ mã Google Apps Script & Cấu hình CSDL
                   </h4>
-                  <span className="text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-0.5 rounded-full">
-                    Chỉ dành cho Cấp cao
+                  <span className="text-[9px] sm:text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                    Chỉ Cấp cao
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Tài khoản Cô Phương được phân quyền: Tạo & chỉnh sửa đề thi, xuất báo cáo ảnh và xuất bảng điểm Excel. Tính năng quản trị Google Sheets được bảo vệ.
-                </p>
               </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-          <span>Tác giả: <strong>Lê Hoà Hiệp - 0983.676.470</strong></span>
+        <div className="px-4 py-2 sm:px-5 sm:py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] sm:text-xs text-slate-500">
+          <span className="truncate">Tác giả: <strong>Lê Hoà Hiệp - 0983.676.470</strong></span>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+            className="px-3 py-1 sm:px-4 sm:py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer flex-shrink-0 ml-2"
           >
             Đóng
           </button>

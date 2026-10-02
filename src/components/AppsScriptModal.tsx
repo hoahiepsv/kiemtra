@@ -96,81 +96,77 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 px-6 py-5 text-white flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-              <FileSpreadsheet className="w-6 h-6 text-sky-100" />
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-1.5 sm:p-4">
+      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-4xl w-full max-h-[96vh] sm:max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Header - Thu gọn & Xoá chú thích */}
+        <div className="bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 px-3 py-2 sm:px-6 sm:py-3.5 text-white flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5 text-sky-100" />
             </div>
-            <div>
-              <h3 className="font-extrabold text-lg tracking-tight">
-                Bộ Mã Google Apps Script & Kết Nối Cơ sở dữ liệu
-              </h3>
-              <p className="text-xs text-sky-100">
-                Tạo mã chèn trực tiếp vào Google Sheets data1 (Đề thi) và data2 (Kết quả)
-              </p>
-            </div>
+            <h3 className="font-extrabold text-xs sm:text-base tracking-tight truncate">
+              Bộ Mã Google Apps Script & Kết Nối CSDL
+            </h3>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors cursor-pointer"
+            className="p-1 sm:p-1.5 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer flex-shrink-0"
+            title="Quay lại Bảng Quản trị"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* Tab Selection */}
-        <div className="bg-sky-50/70 border-b border-sky-100 px-6 py-2 flex flex-wrap gap-2 text-xs">
+        <div className="bg-sky-50/70 border-b border-sky-100 px-2 py-1.5 sm:px-6 sm:py-2 flex flex-wrap gap-1 sm:gap-2 text-[11px] sm:text-xs">
           <button
             onClick={() => setActiveTab('combined')}
-            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+            className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg sm:rounded-xl font-bold transition-all cursor-pointer ${
               activeTab === 'combined'
                 ? 'bg-sky-600 text-white shadow-xs'
                 : 'bg-white text-slate-700 hover:bg-sky-100/70 border border-slate-200'
             }`}
           >
-            ★ 1. Mã Gộp Cả 2 Sheet Data1 &amp; Data2 (Khuyên Dùng)
+            ★ 1. Mã Gộp Cả 2 Sheet (Khuyên Dùng)
           </button>
 
           <button
             onClick={() => setActiveTab('data1')}
-            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+            className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg sm:rounded-xl font-bold transition-all cursor-pointer ${
               activeTab === 'data1'
                 ? 'bg-sky-600 text-white shadow-xs'
                 : 'bg-white text-slate-700 hover:bg-sky-100/70 border border-slate-200'
             }`}
           >
-            2. Mã riêng Sheet Data1 (Đề thi)
+            2. Mã riêng Data1 (Đề thi)
           </button>
 
           <button
             onClick={() => setActiveTab('data2')}
-            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+            className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg sm:rounded-xl font-bold transition-all cursor-pointer ${
               activeTab === 'data2'
                 ? 'bg-sky-600 text-white shadow-xs'
                 : 'bg-white text-slate-700 hover:bg-sky-100/70 border border-slate-200'
             }`}
           >
-            3. Mã riêng Sheet Data2 (Kết quả &amp; Datasheet)
+            3. Mã riêng Data2 (Kết quả)
           </button>
 
           <button
             onClick={() => setActiveTab('urls')}
-            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+            className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg sm:rounded-xl font-bold transition-all cursor-pointer ${
               activeTab === 'urls'
                 ? 'bg-sky-600 text-white shadow-xs'
                 : 'bg-white text-slate-700 hover:bg-sky-100/70 border border-slate-200'
             }`}
           >
-            4. Nhập Link Web App &amp; Kiểm tra kết nối
+            4. Nhập Link Web App & CSDL
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto flex-1 text-xs">
+        <div className="p-2.5 sm:p-6 overflow-y-auto flex-1 text-xs">
           {/* TAB 1: DATA1 SCRIPT */}
           {activeTab === 'data1' && (
             <div className="space-y-4">
