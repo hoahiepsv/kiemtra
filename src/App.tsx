@@ -77,6 +77,8 @@ export default function App() {
           parsed.data2Url.includes('AKfycbw3o7fi087YgBy8WjQZwWqavHeUN8jFfr6T3d2kuWkF4WMajeUlI8xajSP0ZkbPKGbB') ||
           parsed.data2Url.includes('AKfycbxxT7uc08D92XLmNaTvbXJvrrDBYN257-ByspJ00BtOJvankVLbdqfHKddfDm-7BG2s') ||
           parsed.data2Url.includes('AKfycbzS107icL7jGKWU8gZFzC87WeJCRkBYxmTnqJNAwu63Vm1QZomRjn2P2JczWS5OguLn') ||
+          parsed.data2Url.includes('AKfycbzNodWtP-Y8mIC1ZFkH9iNCH7mhZYmUXDrlNL4-haoZ8OwUOBfMcYWmJwmDR_EHUPis') ||
+          parsed.data2Url.includes('AKfycbxdcQlU6nlvMStQ4ZFKv_8PcZwrpZGhMIMBS2F_Zbs5anKC6ohq1xJZj07lp-wg6yAS') ||
           parsed.data2Url.includes('AKfycbyn8IZAj243ZY4mkSVfAkZhUICFWwmKFq-FmjuYDZ4A1ghDhmuAri6Y9z61JlDBu8FY');
         const activeData2Url = isOldData2 ? DEFAULT_EXAM_CONFIG.data2Url : normalizeAppsScriptUrl(parsed.data2Url);
         return {
@@ -155,7 +157,11 @@ export default function App() {
   }, [config.data2Url]);
 
   const handleAuthorClick = () => {
-    setShowAdminAuthModal(true);
+    if (adminSession) {
+      setShowAdminMenuModal(true);
+    } else {
+      setShowAdminAuthModal(true);
+    }
   };
 
   const handleSyncHistoryFromSheet = async () => {
@@ -801,25 +807,49 @@ export default function App() {
       {/* MODAL 0.1: Admin Menu */}
       <AdminMenuModal
         isOpen={showAdminMenuModal}
-        onClose={() => setShowAdminMenuModal(false)}
+        onClose={() => {
+          setShowAdminMenuModal(false);
+          setAdminSession(null); // Chỉ đăng xuất khi GV chủ động tắt Bảng Quản Trị!
+          setSyncToast('Đã đăng xuất khỏi Bảng Điều Khiển Quản Trị.');
+          setTimeout(() => setSyncToast(null), 2500);
+        }}
         session={adminSession}
         history={historyList}
         onSelectAppsScript={() => {
           if (adminSession?.permissions?.canManageAppsScript) {
+            setShowAdminMenuModal(false);
             setShowAppsScriptModal(true);
           }
         }}
-        onSelectExportImage={() => setShowStudentReportExportModal(true)}
-        onSelectExportExcel={() => setShowClassExcelModal(true)}
-        onSelectExamEditor={() => setShowExamEditorModal(true)}
-        onSelectHistory={() => setShowHistoryModal(true)}
-        onSelectViolationWarning={() => setShowViolationWarningModal(true)}
+        onSelectExportImage={() => {
+          setShowAdminMenuModal(false);
+          setShowStudentReportExportModal(true);
+        }}
+        onSelectExportExcel={() => {
+          setShowAdminMenuModal(false);
+          setShowClassExcelModal(true);
+        }}
+        onSelectExamEditor={() => {
+          setShowAdminMenuModal(false);
+          setShowExamEditorModal(true);
+        }}
+        onSelectHistory={() => {
+          setShowAdminMenuModal(false);
+          setShowHistoryModal(true);
+        }}
+        onSelectViolationWarning={() => {
+          setShowAdminMenuModal(false);
+          setShowViolationWarningModal(true);
+        }}
       />
 
       {/* MODAL 1: Apps Script Generator & Config */}
       <AppsScriptModal
         isOpen={showAppsScriptModal}
-        onClose={() => setShowAppsScriptModal(false)}
+        onClose={() => {
+          setShowAppsScriptModal(false);
+          if (adminSession) setShowAdminMenuModal(true);
+        }}
         config={config}
         onSaveConfig={handleSaveConfig}
         onReloadFromData1={handleReloadFromData1}
@@ -828,7 +858,10 @@ export default function App() {
       {/* MODAL 1.5: Student Report Image & ZIP Archiving Export */}
       <StudentReportExportModal
         isOpen={showStudentReportExportModal}
-        onClose={() => setShowStudentReportExportModal(false)}
+        onClose={() => {
+          setShowStudentReportExportModal(false);
+          if (adminSession) setShowAdminMenuModal(true);
+        }}
         config={config}
         questions={questions}
       />
@@ -836,11 +869,17 @@ export default function App() {
       {/* MODAL 1.7: Student Submission History (Synced from Cơ sở dữ liệu) */}
       <HistoryModal
         isOpen={showHistoryModal}
-        onClose={() => setShowHistoryModal(false)}
+        onClose={() => {
+          setShowHistoryModal(false);
+          if (adminSession) setShowAdminMenuModal(true);
+        }}
         history={historyList}
         isSyncing={isSyncingHistory}
         onRefreshFromSheet={handleSyncHistoryFromSheet}
-        onOpenViolations={() => setShowViolationWarningModal(true)}
+        onOpenViolations={() => {
+          setShowHistoryModal(false);
+          setShowViolationWarningModal(true);
+        }}
         onSelectSubmission={(sub) => {
           setPreviewSubmission(sub);
           setShowPdfModal(true);
@@ -854,7 +893,10 @@ export default function App() {
       {/* MODAL 1.75: Violation Warning (Duplicate IP Detection) */}
       <ViolationWarningModal
         isOpen={showViolationWarningModal}
-        onClose={() => setShowViolationWarningModal(false)}
+        onClose={() => {
+          setShowViolationWarningModal(false);
+          if (adminSession) setShowAdminMenuModal(true);
+        }}
         history={historyList}
         isSyncing={isSyncingHistory}
         onRefreshFromSheet={handleSyncHistoryFromSheet}
@@ -867,7 +909,10 @@ export default function App() {
       {/* MODAL 1.8: Class Excel Export (*.xlsx) */}
       <ClassExcelExportModal
         isOpen={showClassExcelModal}
-        onClose={() => setShowClassExcelModal(false)}
+        onClose={() => {
+          setShowClassExcelModal(false);
+          if (adminSession) setShowAdminMenuModal(true);
+        }}
         config={config}
         questions={questions}
       />
@@ -875,7 +920,10 @@ export default function App() {
       {/* MODAL 1.9: Exam Creator & Editor */}
       <ExamEditorModal
         isOpen={showExamEditorModal}
-        onClose={() => setShowExamEditorModal(false)}
+        onClose={() => {
+          setShowExamEditorModal(false);
+          if (adminSession) setShowAdminMenuModal(true);
+        }}
         config={config}
         questions={questions}
         onSaveExam={handleSaveExamFromEditor}
