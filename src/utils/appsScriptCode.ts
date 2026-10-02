@@ -239,8 +239,13 @@ function removeAccents(str) {
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
-    lock.waitLock(15000);
-  } catch (t) {}
+    lock.waitLock(30000); // Khóa script tối đa 30s để xử lý đồng thời an toàn cho toàn bộ học sinh
+  } catch (t) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: "Hệ thống đang bận lưu bài cho nhiều học sinh, vui lòng thử lại sau vài giây!"
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
 
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -319,28 +324,88 @@ function doPost(e) {
       }
     }
 
+    // =========================================================================
+    // TRƯỜNG HỢP 1: BÀI NỘP MỚI CỦA HỌC SINH (!isUpdate)
+    // TUYỆT ĐỐI KHÔNG TÌM KIẾM DÒNG CŨ ĐỂ GHI ĐÈ!
+    // LUÔN LUÔN THÊM DÒNG MỚI VÀO CUỐI BẢNG ĐỂ TRÁNH NHẦM LẪN HỌC SINH!
+    // =========================================================================
+    if (!isUpdate) {
+      var nextRow = Math.max(lastRow + 1, 2);
+      var nextSTT = 1;
+
+      if (lastRow >= 2) {
+        var lastSTTVal = sheet.getRange(lastRow, sttColIdx + 1).getValue();
+        var parsedSTT = parseInt(lastSTTVal, 10);
+        if (!isNaN(parsedSTT) && parsedSTT > 0) {
+          nextSTT = parsedSTT + 1;
+        } else {
+          nextSTT = lastRow; // Dòng 2 -> STT 1, dòng 3 -> STT 2,...
+        }
+      }
+
+      var newRowData = new Array(Math.max(lastCol, 9));
+      for (var k = 0; k < newRowData.length; k++) newRowData[k] = "";
+      newRowData[sttColIdx] = nextSTT;
+      newRowData[nameColIdx] = studentName;
+      newRowData[classColIdx] = className;
+      newRowData[scoreColIdx] = totalScore;
+      newRowData[detailColIdx] = scoreString;
+      newRowData[5] = startTime;
+      newRowData[6] = endTime;
+      newRowData[7] = totalDuration;
+      newRowData[ipColIdx] = clientIp;
+
+      // Điền điểm từng câu vào các cột câu tương ứng
+      if (data.questionScores && typeof data.questionScores === "object") {
+        for (var qKey in data.questionScores) {
+          var qN = parseInt(qKey, 10);
+          if (!isNaN(qN) && questionCols[qN] !== undefined && questionCols[qN] < newRowData.length) {
+            newRowData[questionCols[qN]] = data.questionScores[qKey];
+          }
+        }
+      }
+
+      sheet.getRange(nextRow, 1, 1, newRowData.length).setValues([newRowData]);
+      SpreadsheetApp.flush(); // Đảm bảo ghi xong nguyên vẹn vào Google Sheet
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        action: "inserted",
+        message: "Đã lưu kết quả bài thi của học sinh " + studentName + " vào Google Sheet thành công!",
+        stt: nextSTT,
+        row: nextRow,
+        studentName: studentName,
+        totalScore: totalScore,
+        clientIp: clientIp
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // =========================================================================
+    // TRƯỜNG HỢP 2: GIÁO VIÊN SỬA ĐIỂM / CHẤM LẠI (isUpdate === true)
+    // CHỈ CHẠY KHI GIÁO VIÊN BẤM SỬA ĐIỂM HOẶC CHẤM LẠI TRÊN GIAO DIỆN QUẢN TRỊ!
+    // =========================================================================
     var targetRow = -1;
 
-    // 2. Tìm dòng học sinh nếu bảng đã có dữ liệu
     if (lastRow >= 2) {
       var allRows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-      var cleanTargetName = removeAccents(studentName);
-      var cleanTargetClass = removeAccents(className);
+      var cleanTargetName = removeAccents(studentName).trim();
+      var cleanTargetClass = removeAccents(className).trim();
       var rawTargetName = cleanTargetName.replace(/\s+/g, "");
       var rawTargetClass = cleanTargetClass.replace(/\s+/g, "");
       var targetSTT = (data.stt !== undefined && data.stt !== null && String(data.stt).trim() !== "") ? parseInt(data.stt, 10) : -1;
       var cleanTargetEndTime = String(endTime || "").trim();
       var cleanTargetStartTime = String(startTime || "").trim();
 
-      // Vòng 1: Tìm CHÍNH XÁC lần làm bài khi học sinh làm nhiều lần (Khớp Tên + Lớp VÀ STT hoặc Thời gian nộp)
+      // Vòng 1: Tìm theo Tên + Lớp CHÍNH XÁC VÀ (STT hoặc Thời gian nộp)
       if (rawTargetName) {
         for (var r = 0; r < allRows.length; r++) {
-          var rName = removeAccents(String(allRows[r][nameColIdx] || ""));
-          var rClass = removeAccents(String(allRows[r][classColIdx] || ""));
+          var rName = removeAccents(String(allRows[r][nameColIdx] || "")).trim();
+          var rClass = removeAccents(String(allRows[r][classColIdx] || "")).trim();
           var rRawName = rName.replace(/\s+/g, "");
           var rRawClass = rClass.replace(/\s+/g, "");
 
-          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName) || (rRawName && rawTargetName && (rRawName.indexOf(rawTargetName) !== -1 || rawTargetName.indexOf(rRawName) !== -1));
+          // BẮT BUỘC SO KHỚP CHÍNH XÁC (===), TUYỆT ĐỐI KHÔNG DÙNG indexOf ĐỂ TRÁNH NHẬN NHẦM TÊN!
+          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName);
           var classMatches = !rawTargetClass || !rRawClass || (rRawClass === rawTargetClass);
 
           if (nameMatches && classMatches) {
@@ -360,15 +425,15 @@ function doPost(e) {
         }
       }
 
-      // Vòng 2: Nếu chưa tìm thấy dòng chính xác theo thời gian/STT, mới lấy dòng gần nhất khớp Tên + Lớp
+      // Vòng 2: Nếu chưa tìm thấy dòng theo STT/Thời gian, lấy dòng gần nhất khớp CHÍNH XÁC Tên + Lớp
       if (targetRow === -1 && rawTargetName) {
         for (var r = allRows.length - 1; r >= 0; r--) {
-          var rName = removeAccents(String(allRows[r][nameColIdx] || ""));
-          var rClass = removeAccents(String(allRows[r][classColIdx] || ""));
+          var rName = removeAccents(String(allRows[r][nameColIdx] || "")).trim();
+          var rClass = removeAccents(String(allRows[r][classColIdx] || "")).trim();
           var rRawName = rName.replace(/\s+/g, "");
           var rRawClass = rClass.replace(/\s+/g, "");
 
-          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName) || (rRawName && rawTargetName && (rRawName.indexOf(rawTargetName) !== -1 || rawTargetName.indexOf(rRawName) !== -1));
+          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName);
           var classMatches = !rawTargetClass || !rRawClass || (rRawClass === rawTargetClass);
 
           if (nameMatches && classMatches) {
@@ -377,153 +442,89 @@ function doPost(e) {
           }
         }
       }
-
-      // Vòng 3: Tìm theo STT nếu chưa tìm thấy bằng tên
-      if (targetRow === -1 && targetSTT > 0) {
-        for (var r = 0; r < allRows.length; r++) {
-          var valSTT = parseInt(allRows[r][sttColIdx], 10);
-          if (valSTT === targetSTT) {
-            targetRow = r + 2;
-            break;
-          }
-        }
-      }
     }
 
-    // 3. NẾU LÀ YÊU CẦU SỬA ĐIỂM (isUpdate) HOẶC ĐÃ TÌM THẤY HỌC SINH CÓ SẴN:
-    // TUYỆT ĐỐI THAY THẾ TRỰC TIẾP Ô ĐIỂM, KHÔNG TẠO THÊM DÒNG MỚI!
-    if (isUpdate || targetRow >= 2) {
-      if (targetRow === -1) {
-        // Nếu lệnh sửa điểm không khớp chính xác tên, cập nhật dòng học sinh gần nhất (lastRow)
-        targetRow = lastRow >= 2 ? lastRow : 2;
-      }
-
-      // A. CẬP NHẬT ĐIỂM MỚI CỦA CÂU ĐÓ VÀO ĐÚNG CỘT CÂU TƯƠNG ỨNG TRÊN DATASHEET
-      var targetOrderNum = data.targetOrderNumber !== undefined ? parseInt(data.targetOrderNumber, 10) : (e && e.parameter && e.parameter.targetOrderNumber ? parseInt(e.parameter.targetOrderNumber, 10) : -1);
-      var targetQScore = data.questionScore !== undefined ? Number(data.questionScore) : (e && e.parameter && e.parameter.questionScore !== undefined ? Number(e.parameter.questionScore) : null);
-
-      if (targetOrderNum !== -1 && targetQScore !== null) {
-        if (questionCols[targetOrderNum] !== undefined) {
-          sheet.getRange(targetRow, questionCols[targetOrderNum] + 1).setValue(targetQScore);
-        }
-      }
-
-      // B. Cập nhật tất cả các câu từ questionScores nếu có
-      var qScores = data.questionScores;
-      if (qScores && typeof qScores === "object") {
-        for (var qKey in qScores) {
-          var qN = parseInt(qKey, 10);
-          if (!isNaN(qN) && questionCols[qN] !== undefined) {
-            sheet.getRange(targetRow, questionCols[qN] + 1).setValue(qScores[qKey]);
-          }
-        }
-      }
-
-      // C. TÍNH LẠI TỔNG SỐ ĐIỂM TỪ BÀI LÀM CỦA HỌC SINH (SUM TOÀN BỘ CÁC CỘT CÂU HỎI)
-      var finalCalculatedTotal = 0;
-      var hasComputedFromColumns = false;
-      var questionColKeys = Object.keys(questionCols);
-
-      if (questionColKeys.length > 0) {
-        // Đọc lại các ô câu hỏi thực tế trên dòng đó trong datasheet để tính tổng chính xác 100%
-        for (var i = 0; i < questionColKeys.length; i++) {
-          var qOrder = parseInt(questionColKeys[i], 10);
-          var colIdx = questionCols[qOrder];
-          var cellVal = sheet.getRange(targetRow, colIdx + 1).getValue();
-          var pts = 0;
-          if (typeof cellVal === "number") {
-            pts = cellVal;
-          } else if (cellVal !== "" && cellVal !== null && cellVal !== undefined) {
-            var parsedPts = parseFloat(String(cellVal).replace(",", "."));
-            if (!isNaN(parsedPts)) pts = parsedPts;
-          }
-          finalCalculatedTotal += pts;
-        }
-        hasComputedFromColumns = true;
-      } else if (qScores && typeof qScores === "object" && Object.keys(qScores).length > 0) {
-        for (var k in qScores) {
-          finalCalculatedTotal += Number(qScores[k]) || 0;
-        }
-        hasComputedFromColumns = true;
-      }
-
-      // Nếu tính được từ các cột câu hỏi thì dùng tổng này; nếu không, dùng totalScore từ client gửi lên
-      var finalTotalScore = hasComputedFromColumns ? (Math.round(finalCalculatedTotal * 100) / 100) : totalScore;
-
-      // D. Cập nhật số điểm tổng mới của học sinh vào đúng ô cột Tổng điểm
-      if (scoreColIdx !== -1) {
-        sheet.getRange(targetRow, scoreColIdx + 1).setValue(finalTotalScore);
-      }
-
-      // E. Cập nhật chuỗi Điểm từng câu / Chi tiết nếu có
-      if (detailColIdx !== -1 && scoreString) {
-        sheet.getRange(targetRow, detailColIdx + 1).setValue(scoreString);
-      }
-
+    if (targetRow === -1) {
       return ContentService.createTextOutput(JSON.stringify({
-        status: "success",
-        action: "updated",
-        message: "Đã cập nhật điểm câu " + targetOrderNum + " và tính lại tổng điểm: " + finalTotalScore + " đ thành công!",
-        row: targetRow,
-        studentName: studentName,
-        totalScore: finalTotalScore,
-        targetOrderNumber: targetOrderNum,
-        questionScore: targetQScore
+        status: "error",
+        message: "Không tìm thấy học sinh " + studentName + (className ? " lớp " + className : "") + " trong bảng tính để sửa điểm!"
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 4. CHỈ KHI LÀ BÀI NỘP MỚI LẦN ĐẦU (isUpdate = false và không trùng học sinh):
-    var nextRow = lastRow + 1;
-    if (nextRow < 2) nextRow = 2; // Dòng 1 là tiêu đề
+    // A. CẬP NHẬT ĐIỂM MỚI CỦA CÂU ĐÓ VÀO ĐÚNG CỘT CÂU TƯƠNG ỨNG TRÊN DATASHEET
+    var targetOrderNum = data.targetOrderNumber !== undefined ? parseInt(data.targetOrderNumber, 10) : (e && e.parameter && e.parameter.targetOrderNumber ? parseInt(e.parameter.targetOrderNumber, 10) : -1);
+    var targetQScore = data.questionScore !== undefined ? Number(data.questionScore) : (e && e.parameter && e.parameter.questionScore !== undefined ? Number(e.parameter.questionScore) : null);
 
-    // Tính STT
-    var nextSTT = 1;
-    if (lastRow >= 2) {
-      var lastSTTVal = sheet.getRange(lastRow, sttColIdx + 1).getValue();
-      if (!isNaN(parseInt(lastSTTVal, 10))) {
-        nextSTT = parseInt(lastSTTVal, 10) + 1;
-      } else {
-        nextSTT = lastRow;
+    if (targetOrderNum !== -1 && targetQScore !== null) {
+      if (questionCols[targetOrderNum] !== undefined) {
+        sheet.getRange(targetRow, questionCols[targetOrderNum] + 1).setValue(targetQScore);
       }
     }
 
-    var newRowData = new Array(Math.max(lastCol, 9));
-    for (var k = 0; k < newRowData.length; k++) newRowData[k] = "";
-    newRowData[sttColIdx] = nextSTT;
-    newRowData[nameColIdx] = studentName;
-    newRowData[classColIdx] = className;
-    newRowData[scoreColIdx] = totalScore;
-    newRowData[detailColIdx] = scoreString;
-    newRowData[5] = startTime;
-    newRowData[6] = endTime;
-    newRowData[7] = totalDuration;
-    newRowData[ipColIdx] = clientIp;
-
-    // Điền điểm từng câu vào các cột câu tương ứng nếu datasheet có cột câu
-    if (data.questionScores && typeof data.questionScores === "object") {
-      for (var qKey2 in data.questionScores) {
-        var qN2 = parseInt(qKey2, 10);
-        if (!isNaN(qN2) && questionCols[qN2] !== undefined && questionCols[qN2] < newRowData.length) {
-          newRowData[questionCols[qN2]] = data.questionScores[qKey2];
+    // B. Cập nhật tất cả các câu từ questionScores nếu có
+    var qScores = data.questionScores;
+    if (qScores && typeof qScores === "object") {
+      for (var qKey in qScores) {
+        var qN = parseInt(qKey, 10);
+        if (!isNaN(qN) && questionCols[qN] !== undefined) {
+          sheet.getRange(targetRow, questionCols[qN] + 1).setValue(qScores[qKey]);
         }
       }
     }
 
-    sheet.getRange(nextRow, 1, 1, newRowData.length).setValues([newRowData]);
+    // C. TÍNH LẠI TỔNG SỐ ĐIỂM TỪ BÀI LÀM CỦA HỌC SINH (SUM TOÀN BỘ CÁC CỘT CÂU HỎI)
+    var finalCalculatedTotal = 0;
+    var hasComputedFromColumns = false;
+    var questionColKeys = Object.keys(questionCols);
 
-    var response = {
+    if (questionColKeys.length > 0) {
+      // Đọc lại các ô câu hỏi thực tế trên dòng đó trong datasheet để tính tổng chính xác 100%
+      for (var i = 0; i < questionColKeys.length; i++) {
+        var qOrder = parseInt(questionColKeys[i], 10);
+        var colIdx = questionCols[qOrder];
+        var cellVal = sheet.getRange(targetRow, colIdx + 1).getValue();
+        var pts = 0;
+        if (typeof cellVal === "number") {
+          pts = cellVal;
+        } else if (cellVal !== "" && cellVal !== null && cellVal !== undefined) {
+          var parsedPts = parseFloat(String(cellVal).replace(",", "."));
+          if (!isNaN(parsedPts)) pts = parsedPts;
+        }
+        finalCalculatedTotal += pts;
+      }
+      hasComputedFromColumns = true;
+    } else if (qScores && typeof qScores === "object" && Object.keys(qScores).length > 0) {
+      for (var k in qScores) {
+        finalCalculatedTotal += Number(qScores[k]) || 0;
+      }
+      hasComputedFromColumns = true;
+    }
+
+    // Nếu tính được từ các cột câu hỏi thì dùng tổng này; nếu không, dùng totalScore từ client gửi lên
+    var finalTotalScore = hasComputedFromColumns ? (Math.round(finalCalculatedTotal * 100) / 100) : totalScore;
+
+    // D. Cập nhật số điểm tổng mới của học sinh vào đúng ô cột Tổng điểm
+    if (scoreColIdx !== -1) {
+      sheet.getRange(targetRow, scoreColIdx + 1).setValue(finalTotalScore);
+    }
+
+    // E. Cập nhật chuỗi Điểm từng câu / Chi tiết nếu có
+    if (detailColIdx !== -1 && scoreString) {
+      sheet.getRange(targetRow, detailColIdx + 1).setValue(scoreString);
+    }
+
+    SpreadsheetApp.flush();
+
+    return ContentService.createTextOutput(JSON.stringify({
       status: "success",
-      action: "inserted",
-      message: "Đã lưu kết quả bài thi vào Google Sheet data2 thành công!",
-      stt: nextSTT,
-      row: nextRow,
+      action: "updated",
+      message: "Đã cập nhật điểm câu " + targetOrderNum + " và tính lại tổng điểm: " + finalTotalScore + " đ thành công!",
+      row: targetRow,
       studentName: studentName,
-      totalScore: totalScore,
-      clientIp: clientIp
-    };
-
-    return ContentService.createTextOutput(JSON.stringify(response))
-      .setMimeType(ContentService.MimeType.JSON);
+      totalScore: finalTotalScore,
+      targetOrderNumber: targetOrderNum,
+      questionScore: targetQScore
+    })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({
@@ -1024,8 +1025,13 @@ function doGet(e) {
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
-    lock.waitLock(20000);
-  } catch (lockErr) {}
+    lock.waitLock(30000);
+  } catch (lockErr) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: "Hệ thống đang bận lưu bài cho nhiều học sinh, vui lòng thử lại sau vài giây!"
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
 
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1162,28 +1168,80 @@ function doPost(e) {
       }
     }
 
+    // =========================================================================
+    // TRƯỜNG HỢP 1: BÀI NỘP MỚI CỦA HỌC SINH (!isUpdate)
+    // TUYỆT ĐỐI KHÔNG TÌM KIẾM DÒNG CŨ ĐỂ GHI ĐÈ!
+    // LUÔN LUÔN THÊM DÒNG MỚI VÀO CUỐI BẢNG ĐỂ TRÁNH NHẦM LẪN HỌC SINH!
+    // =========================================================================
+    if (!isUpdate) {
+      var nextRow = Math.max(lastRow2 + 1, 2);
+      var nextSTT = 1;
+      if (lastRow2 >= 2) {
+        var prevSTT = parseInt(sheet2.getRange(lastRow2, sttColIdx + 1).getValue(), 10);
+        nextSTT = (!isNaN(prevSTT) && prevSTT > 0) ? prevSTT + 1 : lastRow2;
+      }
+
+      var newRowData = new Array(Math.max(lastCol2, 9));
+      for (var k = 0; k < newRowData.length; k++) newRowData[k] = "";
+      newRowData[sttColIdx] = nextSTT;
+      newRowData[nameColIdx] = studentName;
+      newRowData[classColIdx] = className;
+      newRowData[scoreColIdx] = totalScore;
+      newRowData[detailColIdx] = scoreString;
+      newRowData[5] = startTime;
+      newRowData[6] = endTime;
+      newRowData[7] = totalDuration;
+      newRowData[ipColIdx] = clientIp;
+
+      // Điền điểm từng câu vào các cột câu tương ứng nếu datasheet có cột câu
+      if (data.questionScores && typeof data.questionScores === "object") {
+        for (var qKey2 in data.questionScores) {
+          var qN2 = parseInt(qKey2, 10);
+          if (!isNaN(qN2) && questionCols[qN2] !== undefined && questionCols[qN2] < newRowData.length) {
+            newRowData[questionCols[qN2]] = data.questionScores[qKey2];
+          }
+        }
+      }
+
+      sheet2.getRange(nextRow, 1, 1, newRowData.length).setValues([newRowData]);
+      SpreadsheetApp.flush();
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        action: "inserted",
+        stt: nextSTT,
+        row: nextRow,
+        studentName: studentName,
+        totalScore: totalScore,
+        clientIp: clientIp
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // =========================================================================
+    // TRƯỜNG HỢP 2: GIÁO VIÊN SỬA ĐIỂM / CHẤM LẠI (isUpdate === true)
+    // CHỈ CHẠY KHI GIÁO VIÊN BẤM SỬA ĐIỂM HOẶC CHẤM LẠI TRÊN GIAO DIỆN QUẢN TRỊ!
+    // =========================================================================
     var targetRow = -1;
 
-    // 3. Tìm dòng của học sinh nếu bảng đã có dữ liệu
     if (lastRow2 >= 2) {
       var allRows = sheet2.getRange(2, 1, lastRow2 - 1, lastCol2).getValues();
-      var cleanTargetName = removeAccents(studentName);
-      var cleanTargetClass = removeAccents(className);
+      var cleanTargetName = removeAccents(studentName).trim();
+      var cleanTargetClass = removeAccents(className).trim();
       var rawTargetName = cleanTargetName.replace(/\\s+/g, "");
       var rawTargetClass = cleanTargetClass.replace(/\\s+/g, "");
       var targetSTT = (data.stt !== undefined && data.stt !== null && String(data.stt).trim() !== "") ? parseInt(data.stt, 10) : -1;
       var cleanTargetEndTime = String(endTime || "").trim();
       var cleanTargetStartTime = String(startTime || "").trim();
 
-      // Vòng 1: Tìm CHÍNH XÁC lần làm bài khi học sinh làm nhiều lần (Khớp Tên + Lớp VÀ STT hoặc Thời gian nộp)
+      // Vòng 1: Tìm theo Tên + Lớp CHÍNH XÁC VÀ (STT hoặc Thời gian nộp)
       if (rawTargetName) {
         for (var rIdx = 0; rIdx < allRows.length; rIdx++) {
-          var rName = removeAccents(String(allRows[rIdx][nameColIdx] || ""));
-          var rClass = removeAccents(String(allRows[rIdx][classColIdx] || ""));
+          var rName = removeAccents(String(allRows[rIdx][nameColIdx] || "")).trim();
+          var rClass = removeAccents(String(allRows[rIdx][classColIdx] || "")).trim();
           var rRawName = rName.replace(/\\s+/g, "");
           var rRawClass = rClass.replace(/\\s+/g, "");
 
-          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName) || (rRawName && rawTargetName && (rRawName.indexOf(rawTargetName) !== -1 || rawTargetName.indexOf(rRawName) !== -1));
+          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName);
           var classMatches = !rawTargetClass || !rRawClass || (rRawClass === rawTargetClass);
 
           if (nameMatches && classMatches) {
@@ -1203,15 +1261,15 @@ function doPost(e) {
         }
       }
 
-      // Vòng 2: Nếu chưa tìm thấy dòng theo STT/thời gian, mới lấy dòng gần nhất khớp Tên + Lớp
+      // Vòng 2: Nếu chưa tìm thấy dòng theo STT/thời gian, mới lấy dòng gần nhất khớp CHÍNH XÁC Tên + Lớp
       if (targetRow === -1 && rawTargetName) {
         for (var rIdx = allRows.length - 1; rIdx >= 0; rIdx--) {
-          var rName = removeAccents(String(allRows[rIdx][nameColIdx] || ""));
-          var rClass = removeAccents(String(allRows[rIdx][classColIdx] || ""));
+          var rName = removeAccents(String(allRows[rIdx][nameColIdx] || "")).trim();
+          var rClass = removeAccents(String(allRows[rIdx][classColIdx] || "")).trim();
           var rRawName = rName.replace(/\\s+/g, "");
           var rRawClass = rClass.replace(/\\s+/g, "");
 
-          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName) || (rRawName && rawTargetName && (rRawName.indexOf(rawTargetName) !== -1 || rawTargetName.indexOf(rRawName) !== -1));
+          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName);
           var classMatches = !rawTargetClass || !rRawClass || (rRawClass === rawTargetClass);
 
           if (nameMatches && classMatches) {
@@ -1220,138 +1278,86 @@ function doPost(e) {
           }
         }
       }
-
-      // Vòng 3: Khớp theo STT nếu chưa tìm thấy bằng Họ tên
-      if (targetRow === -1 && targetSTT > 0) {
-        for (var r2Idx = 0; r2Idx < allRows.length; r2Idx++) {
-          var valSTT = parseInt(allRows[r2Idx][sttColIdx], 10);
-          if (valSTT === targetSTT) {
-            targetRow = r2Idx + 2;
-            break;
-          }
-        }
-      }
     }
 
-    // 4. NẾU LÀ LỆNH SỬA ĐIỂM (isUpdate) HOẶC ĐÃ CÓ HỌC SINH TRONG BẢNG:
-    // Ghi đè trực tiếp điểm vào ô, KHÔNG tạo thêm dòng mới!
-    if (isUpdate || targetRow >= 2) {
-      if (targetRow === -1) {
-        targetRow = lastRow2 >= 2 ? lastRow2 : 2;
-      }
-
-      // A. CẬP NHẬT ĐIỂM MỚI CỦA CÂU ĐÓ VÀO ĐÚNG CỘT CÂU TƯƠNG ỨNG TRÊN DATASHEET
-      var targetOrderNum = data.targetOrderNumber !== undefined ? parseInt(data.targetOrderNumber, 10) : (e && e.parameter && e.parameter.targetOrderNumber ? parseInt(e.parameter.targetOrderNumber, 10) : -1);
-      var targetQScore = data.questionScore !== undefined ? Number(data.questionScore) : (e && e.parameter && e.parameter.questionScore !== undefined ? Number(e.parameter.questionScore) : null);
-
-      if (targetOrderNum !== -1 && targetQScore !== null) {
-        if (questionCols[targetOrderNum] !== undefined) {
-          sheet2.getRange(targetRow, questionCols[targetOrderNum] + 1).setValue(targetQScore);
-        }
-      }
-
-      // B. Cập nhật toàn bộ các câu nếu có danh sách questionScores
-      var qScores = data.questionScores;
-      if (qScores && typeof qScores === "object") {
-        for (var qK in qScores) {
-          var qN = parseInt(qK, 10);
-          if (!isNaN(qN) && questionCols[qN] !== undefined) {
-            sheet2.getRange(targetRow, questionCols[qN] + 1).setValue(qScores[qK]);
-          }
-        }
-      }
-
-      // C. TÍNH LẠI TỔNG SỐ ĐIỂM TỪ BÀI LÀM CỦA HỌC SINH (SUM TOÀN BỘ CÁC CỘT CÂU HỎI)
-      var finalCalculatedTotal = 0;
-      var hasComputedFromColumns = false;
-      var questionColKeys = Object.keys(questionCols);
-
-      if (questionColKeys.length > 0) {
-        for (var cIdx = 0; cIdx < questionColKeys.length; cIdx++) {
-          var qOrderN = parseInt(questionColKeys[cIdx], 10);
-          var qColPos = questionCols[qOrderN];
-          var cellVal = sheet2.getRange(targetRow, qColPos + 1).getValue();
-          var pts = 0;
-          if (typeof cellVal === "number") {
-            pts = cellVal;
-          } else if (cellVal !== "" && cellVal !== null && cellVal !== undefined) {
-            var parsedPts = parseFloat(String(cellVal).replace(",", "."));
-            if (!isNaN(parsedPts)) pts = parsedPts;
-          }
-          finalCalculatedTotal += pts;
-        }
-        hasComputedFromColumns = true;
-      } else if (qScores && typeof qScores === "object" && Object.keys(qScores).length > 0) {
-        for (var k2 in qScores) {
-          finalCalculatedTotal += Number(qScores[k2]) || 0;
-        }
-        hasComputedFromColumns = true;
-      }
-
-      var finalTotalScore = hasComputedFromColumns ? (Math.round(finalCalculatedTotal * 100) / 100) : totalScore;
-
-      // D. Cập nhật Tổng điểm vào cột Tổng điểm
-      if (scoreColIdx !== -1) {
-        sheet2.getRange(targetRow, scoreColIdx + 1).setValue(finalTotalScore);
-      }
-
-      // E. Cập nhật chuỗi Điểm từng câu vào cột Chi tiết
-      if (detailColIdx !== -1 && scoreString) {
-        sheet2.getRange(targetRow, detailColIdx + 1).setValue(scoreString);
-      }
-
+    if (targetRow === -1) {
       return ContentService.createTextOutput(JSON.stringify({
-        status: "success",
-        action: "updated",
-        message: "Đã cập nhật điểm câu " + targetOrderNum + " và tính lại tổng điểm: " + finalTotalScore + " đ thành công!",
-        row: targetRow,
-        studentName: studentName,
-        totalScore: finalTotalScore,
-        targetOrderNumber: targetOrderNum,
-        questionScore: targetQScore
+        status: "error",
+        message: "Không tìm thấy học sinh " + studentName + (className ? " lớp " + className : "") + " trong bảng tính để sửa điểm!"
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 5. NẾU LÀ BÀI NỘP MỚI LẦN ĐẦU (Thêm dòng mới vào sheet data2):
-    var nextRow = Math.max(lastRow2 + 1, 2);
-    var nextSTT = 1;
-    if (lastRow2 >= 2) {
-      var prevSTT = parseInt(sheet2.getRange(lastRow2, sttColIdx + 1).getValue(), 10);
-      nextSTT = isNaN(prevSTT) ? lastRow2 : prevSTT + 1;
+    // A. CẬP NHẬT ĐIỂM MỚI CỦA CÂU ĐÓ VÀO ĐÚNG CỘT CÂU TƯƠNG ỨNG TRÊN DATASHEET
+    var targetOrderNum = data.targetOrderNumber !== undefined ? parseInt(data.targetOrderNumber, 10) : (e && e.parameter && e.parameter.targetOrderNumber ? parseInt(e.parameter.targetOrderNumber, 10) : -1);
+    var targetQScore = data.questionScore !== undefined ? Number(data.questionScore) : (e && e.parameter && e.parameter.questionScore !== undefined ? Number(e.parameter.questionScore) : null);
+
+    if (targetOrderNum !== -1 && targetQScore !== null) {
+      if (questionCols[targetOrderNum] !== undefined) {
+        sheet2.getRange(targetRow, questionCols[targetOrderNum] + 1).setValue(targetQScore);
+      }
     }
 
-    var newRowData = new Array(Math.max(lastCol2, 9));
-    for (var k = 0; k < newRowData.length; k++) newRowData[k] = "";
-    newRowData[sttColIdx] = nextSTT;
-    newRowData[nameColIdx] = studentName;
-    newRowData[classColIdx] = className;
-    newRowData[scoreColIdx] = totalScore;
-    newRowData[detailColIdx] = scoreString;
-    newRowData[5] = startTime;
-    newRowData[6] = endTime;
-    newRowData[7] = totalDuration;
-    newRowData[ipColIdx] = clientIp;
-
-    // Điền điểm từng câu vào các cột câu tương ứng nếu datasheet có cột câu
-    if (data.questionScores && typeof data.questionScores === "object") {
-      for (var qKey2 in data.questionScores) {
-        var qN2 = parseInt(qKey2, 10);
-        if (!isNaN(qN2) && questionCols[qN2] !== undefined && questionCols[qN2] < newRowData.length) {
-          newRowData[questionCols[qN2]] = data.questionScores[qKey2];
+    // B. Cập nhật toàn bộ các câu nếu có danh sách questionScores
+    var qScores = data.questionScores;
+    if (qScores && typeof qScores === "object") {
+      for (var qK in qScores) {
+        var qN = parseInt(qK, 10);
+        if (!isNaN(qN) && questionCols[qN] !== undefined) {
+          sheet2.getRange(targetRow, questionCols[qN] + 1).setValue(qScores[qK]);
         }
       }
     }
 
-    sheet2.getRange(nextRow, 1, 1, newRowData.length).setValues([newRowData]);
+    // C. TÍNH LẠI TỔNG SỐ ĐIỂM TỪ BÀI LÀM CỦA HỌC SINH (SUM TOÀN BỘ CÁC CỘT CÂU HỎI)
+    var finalCalculatedTotal = 0;
+    var hasComputedFromColumns = false;
+    var questionColKeys = Object.keys(questionCols);
+
+    if (questionColKeys.length > 0) {
+      for (var cIdx = 0; cIdx < questionColKeys.length; cIdx++) {
+        var qOrderN = parseInt(questionColKeys[cIdx], 10);
+        var qColPos = questionCols[qOrderN];
+        var cellVal = sheet2.getRange(targetRow, qColPos + 1).getValue();
+        var pts = 0;
+        if (typeof cellVal === "number") {
+          pts = cellVal;
+        } else if (cellVal !== "" && cellVal !== null && cellVal !== undefined) {
+          var parsedPts = parseFloat(String(cellVal).replace(",", "."));
+          if (!isNaN(parsedPts)) pts = parsedPts;
+        }
+        finalCalculatedTotal += pts;
+      }
+      hasComputedFromColumns = true;
+    } else if (qScores && typeof qScores === "object" && Object.keys(qScores).length > 0) {
+      for (var k2 in qScores) {
+        finalCalculatedTotal += Number(qScores[k2]) || 0;
+      }
+      hasComputedFromColumns = true;
+    }
+
+    var finalTotalScore = hasComputedFromColumns ? (Math.round(finalCalculatedTotal * 100) / 100) : totalScore;
+
+    // D. Cập nhật Tổng điểm vào cột Tổng điểm
+    if (scoreColIdx !== -1) {
+      sheet2.getRange(targetRow, scoreColIdx + 1).setValue(finalTotalScore);
+    }
+
+    // E. Cập nhật chuỗi Điểm từng câu vào cột Chi tiết
+    if (detailColIdx !== -1 && scoreString) {
+      sheet2.getRange(targetRow, detailColIdx + 1).setValue(scoreString);
+    }
+
+    SpreadsheetApp.flush();
 
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
-      action: "inserted",
-      stt: nextSTT,
-      row: nextRow,
+      action: "updated",
+      message: "Đã cập nhật điểm câu " + targetOrderNum + " và tính lại tổng điểm: " + finalTotalScore + " đ thành công!",
+      row: targetRow,
       studentName: studentName,
-      totalScore: totalScore,
-      clientIp: clientIp
+      totalScore: finalTotalScore,
+      targetOrderNumber: targetOrderNum,
+      questionScore: targetQScore
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {

@@ -372,6 +372,9 @@ export async function sendSubmissionToData2(
         urlObj.searchParams.set('questionScore', String(options.questionScore ?? 0));
         urlObj.searchParams.set('isCorrect', String(options.isCorrect ?? false));
       }
+    } else {
+      urlObj.searchParams.set('action', 'submit');
+      urlObj.searchParams.set('isUpdate', 'false');
     }
     targetUrl = urlObj.toString();
   } catch {
@@ -381,7 +384,7 @@ export async function sendSubmissionToData2(
   const payload = {
     action: isUpdate ? 'update' : 'submit',
     isUpdate: isUpdate,
-    stt: record.stt,
+    stt: isUpdate ? record.stt : undefined, // Bài nộp mới không gửi STT cục bộ của máy học sinh để tránh trùng với dòng cũ
     studentName: record.studentName,
     className: record.className,
     totalScore: calculatedTotalScore,
