@@ -1,5 +1,6 @@
 import { SubmissionRecord, DraftExam, Question, ExamConfig } from '../types';
 import { formatExamDateTime, formatExamDuration } from './dateUtils';
+import { parseScoreStringDetailed } from './scoreStringUtils';
 
 const DRAFT_STORAGE_KEY = 'kiem_tra_thuong_xuyen_draft';
 const UNSYNCED_STORAGE_KEY = 'kiem_tra_thuong_xuyen_unsynced';
@@ -87,6 +88,50 @@ export function clearAllExamData(): void {
   }
 }
 
+/**
+ * Chuyển đổi chuỗi ngày giờ làm bài ("20:58 30/09/2026" hoặc ISO) sang timestamp mili-giây
+ */
+export function parseSubmissionDateTime(dateStr?: string): number {
+  if (!dateStr || typeof dateStr !== 'string') return 0;
+  const s = dateStr.trim();
+  if (s.includes('/') && s.includes(':')) {
+    const parts = s.split(/\s+/);
+    if (parts.length >= 2) {
+      const [h, m] = parts[0].split(':').map(Number);
+      const [d, mo, y] = parts[1].split('/').map(Number);
+      if (y && mo && d) {
+        return new Date(y, mo - 1, d, h || 0, m || 0).getTime();
+      }
+    }
+  }
+  const parsed = Date.parse(s);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * Thuật toán so sánh thứ tự bài nộp: MỚI NHẤT đứng trước, CŨ NHẤT đứng sau
+ */
+export function compareSubmissionsNewestFirst(a: SubmissionRecord, b: SubmissionRecord): number {
+  const tsA = a.timestamp || 0;
+  const tsB = b.timestamp || 0;
+  const endA = parseSubmissionDateTime(a.endTime);
+  const endB = parseSubmissionDateTime(b.endTime);
+  const startA = parseSubmissionDateTime(a.startTime);
+  const startB = parseSubmissionDateTime(b.startTime);
+
+  const bestTimeA = Math.max(tsA, endA, startA);
+  const bestTimeB = Math.max(tsB, endB, startB);
+
+  if (bestTimeA !== bestTimeB && bestTimeA > 0 && bestTimeB > 0) {
+    return bestTimeB - bestTimeA; // Mới nhất lên trước
+  }
+
+  // Nếu không có thời gian thì căn cứ theo STT (dòng ghi sau trên Google Sheet có STT lớn hơn -> nộp sau)
+  const sttA = Number(a.stt) || 0;
+  const sttB = Number(b.stt) || 0;
+  return sttB - sttA;
+}
+
 export function syncSubmissionsFromSheetToHistory(sheetRecords: SubmissionRecord[]): SubmissionRecord[] {
   try {
     const list = Array.isArray(sheetRecords) ? [...sheetRecords] : [];
@@ -102,6 +147,9 @@ export function syncSubmissionsFromSheetToHistory(sheetRecords: SubmissionRecord
         fullList.push(item);
       }
     }
+
+    // Sắp xếp bài nộp: MỚI NHẤT -> CŨ NHẤT
+    fullList.sort(compareSubmissionsNewestFirst);
 
     localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(fullList.slice(0, 1000)));
     return fullList;
@@ -140,48 +188,62 @@ export function updateSubmissionInHistory(updatedRecord: SubmissionRecord): Subm
     const existing = getSubmissionHistory();
     const updatedName = String(updatedRecord.studentName || '').toLowerCase().trim();
     const updatedClass = String(updatedRecord.className || '').toLowerCase().trim();
+    const updatedEndTime = String(updatedRecord.endTime || '').trim();
+    const updatedStartTime = String(updatedRecord.startTime || '').trim();
+    const updatedSTT = updatedRecord.stt !== undefined && updatedRecord.stt !== null && Number(updatedRecord.stt) > 0 ? Number(updatedRecord.stt) : undefined;
+    const updatedTimestamp = updatedRecord.timestamp;
 
-    // 1. Tìm vị trí của học sinh: Ưu tiên số 1 là Họ tên + Lớp (đặc trưng duy nhất của học sinh)
+    // 1. Tìm vị trí chính xác của LẦN NỘP BÀI NÀY:
+    // Khi học sinh làm 2 lần trở lên, phải phân biệt theo STT hoặc endTime hoặc timestamp
     let foundIndex = existing.findIndex((item) => {
       const matchName = String(item.studentName || '').toLowerCase().trim() === updatedName;
       const matchClass = !updatedClass || String(item.className || '').toLowerCase().trim() === updatedClass;
-      return matchName && matchClass;
+      if (!matchName || !matchClass) return false;
+
+      // Ưu tiên 1.1: Khớp STT
+      if (updatedSTT !== undefined && item.stt !== undefined && Number(item.stt) === updatedSTT) {
+        return true;
+      }
+      // Ưu tiên 1.2: Khớp endTime
+      if (updatedEndTime && item.endTime && item.endTime.trim() === updatedEndTime) {
+        return true;
+      }
+      // Ưu tiên 1.3: Khớp timestamp
+      if (updatedTimestamp && item.timestamp && item.timestamp === updatedTimestamp) {
+        return true;
+      }
+      // Ưu tiên 1.4: Khớp startTime
+      if (updatedStartTime && item.startTime && item.startTime.trim() === updatedStartTime) {
+        return true;
+      }
+      return false;
     });
 
-    // 2. Nếu không tìm thấy bằng tên, mới tìm theo STT nếu có
-    if (foundIndex === -1 && updatedRecord.stt !== undefined && updatedRecord.stt !== null && Number(updatedRecord.stt) > 0) {
-      foundIndex = existing.findIndex((item) => Number(item.stt) === Number(updatedRecord.stt));
+    // 2. Dự phòng: Nếu không khớp chính xác lần nộp qua thời gian/STT, mới tìm theo Tên + Lớp
+    if (foundIndex === -1) {
+      foundIndex = existing.findIndex((item) => {
+        const matchName = String(item.studentName || '').toLowerCase().trim() === updatedName;
+        const matchClass = !updatedClass || String(item.className || '').toLowerCase().trim() === updatedClass;
+        return matchName && matchClass;
+      });
     }
 
     if (foundIndex !== -1) {
-      // Giữ nguyên STT ban đầu của học sinh
-      const originalSTT = existing[foundIndex].stt ?? updatedRecord.stt;
-      updatedRecord.stt = originalSTT;
-
-      // Thay thế trực tiếp ô điểm và kết quả của học sinh này
+      const targetItem = existing[foundIndex];
+      // Cập nhật đúng bản ghi lần nộp bài này
       existing[foundIndex] = {
-        ...existing[foundIndex],
+        ...targetItem,
         ...updatedRecord,
-        stt: originalSTT,
+        stt: targetItem.stt ?? updatedRecord.stt,
         totalScore: updatedRecord.totalScore,
         scoreString: updatedRecord.scoreString,
         questionResults: updatedRecord.questionResults,
       };
 
-      // Đồng thời dọn sạch bất kỳ bản ghi trùng lặp nào của học sinh này
-      const targetSTT = originalSTT;
-      const deduplicated = existing.filter((item, idx) => {
-        if (idx === foundIndex) return true;
-        const sameName = String(item.studentName || '').toLowerCase().trim() === updatedName;
-        const sameClass = !updatedClass || String(item.className || '').toLowerCase().trim() === updatedClass;
-        const sameSTT = targetSTT !== undefined && item.stt === targetSTT;
-        return !(sameSTT || (sameName && sameClass));
-      });
-
-      localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(deduplicated));
-      return deduplicated;
+      // Giữ nguyên toàn bộ các lần làm bài khác của học sinh đó (không xóa lần làm khác)
+      localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(existing));
+      return existing;
     } else {
-      // Chỉ khi chưa từng có thì mới thêm vào
       existing.unshift(updatedRecord);
       localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(existing));
       return existing;
@@ -263,13 +325,26 @@ export async function sendSubmissionToData2(
 
   // Lập bản đồ điểm từng câu để gửi sang datasheet
   const questionScores: Record<string, number> = {};
-  if (record.questionResults && Array.isArray(record.questionResults)) {
+  if (record.questionResults && Array.isArray(record.questionResults) && record.questionResults.length > 0) {
     record.questionResults.forEach((q) => {
       questionScores[String(q.orderNumber)] = q.earnedPoints;
+    });
+  } else if (record.scoreString) {
+    const { scoreMap } = parseScoreStringDetailed(record.scoreString);
+    scoreMap.forEach((pts, orderNum) => {
+      questionScores[String(orderNum)] = pts;
     });
   }
   if (options?.targetOrderNumber !== undefined && options.questionScore !== undefined) {
     questionScores[String(options.targetOrderNumber)] = options.questionScore;
+  }
+
+  // TÍNH LẠI TỔNG SỐ ĐIỂM TỪ BÀI LÀM CỦA HỌC SINH (Tổng điểm các câu)
+  let calculatedTotalScore = record.totalScore ?? 0;
+  const scoreKeys = Object.keys(questionScores);
+  if (scoreKeys.length > 0) {
+    const sumPoints = scoreKeys.reduce((acc, k) => acc + (Number(questionScores[k]) || 0), 0);
+    calculatedTotalScore = Math.round(sumPoints * 100) / 100;
   }
 
   // Xây dựng URL kèm tham số truy vấn: Đảm bảo dù Google Apps Script đọc e.parameter hay e.postData đều nhận diện chuẩn lệnh sửa điểm
@@ -281,10 +356,16 @@ export async function sendSubmissionToData2(
       urlObj.searchParams.set('isUpdate', 'true');
       urlObj.searchParams.set('studentName', record.studentName || '');
       urlObj.searchParams.set('className', record.className || '');
-      urlObj.searchParams.set('totalScore', String(record.totalScore ?? 0));
+      urlObj.searchParams.set('totalScore', String(calculatedTotalScore));
       urlObj.searchParams.set('scoreString', record.scoreString || '');
       if (record.stt) {
         urlObj.searchParams.set('stt', String(record.stt));
+      }
+      if (record.endTime) {
+        urlObj.searchParams.set('endTime', record.endTime);
+      }
+      if (record.startTime) {
+        urlObj.searchParams.set('startTime', record.startTime);
       }
       if (options?.targetOrderNumber !== undefined) {
         urlObj.searchParams.set('targetOrderNumber', String(options.targetOrderNumber));
@@ -303,7 +384,7 @@ export async function sendSubmissionToData2(
     stt: record.stt,
     studentName: record.studentName,
     className: record.className,
-    totalScore: record.totalScore,
+    totalScore: calculatedTotalScore,
     scoreString: record.scoreString,
     startTime: record.startTime,
     endTime: record.endTime,

@@ -328,9 +328,40 @@ function doPost(e) {
       var cleanTargetClass = removeAccents(className);
       var rawTargetName = cleanTargetName.replace(/\s+/g, "");
       var rawTargetClass = cleanTargetClass.replace(/\s+/g, "");
+      var targetSTT = (data.stt !== undefined && data.stt !== null && String(data.stt).trim() !== "") ? parseInt(data.stt, 10) : -1;
+      var cleanTargetEndTime = String(endTime || "").trim();
+      var cleanTargetStartTime = String(startTime || "").trim();
 
-      // Ưu tiên 1: Khớp chuẩn Họ tên + Lớp (khử dấu, không phân biệt hoa thường và khoảng trắng)
+      // Vòng 1: Tìm CHÍNH XÁC lần làm bài khi học sinh làm nhiều lần (Khớp Tên + Lớp VÀ STT hoặc Thời gian nộp)
       if (rawTargetName) {
+        for (var r = 0; r < allRows.length; r++) {
+          var rName = removeAccents(String(allRows[r][nameColIdx] || ""));
+          var rClass = removeAccents(String(allRows[r][classColIdx] || ""));
+          var rRawName = rName.replace(/\s+/g, "");
+          var rRawClass = rClass.replace(/\s+/g, "");
+
+          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName) || (rRawName && rawTargetName && (rRawName.indexOf(rawTargetName) !== -1 || rawTargetName.indexOf(rRawName) !== -1));
+          var classMatches = !rawTargetClass || !rRawClass || (rRawClass === rawTargetClass);
+
+          if (nameMatches && classMatches) {
+            var valSTT = parseInt(allRows[r][sttColIdx], 10);
+            var valEndTime = String(allRows[r][6] || "").trim();
+            var valStartTime = String(allRows[r][5] || "").trim();
+
+            var sttMatches = (targetSTT > 0 && !isNaN(valSTT) && valSTT === targetSTT);
+            var timeMatches = (cleanTargetEndTime && (valEndTime === cleanTargetEndTime || valStartTime === cleanTargetEndTime)) ||
+                              (cleanTargetStartTime && (valStartTime === cleanTargetStartTime || valEndTime === cleanTargetStartTime));
+
+            if (sttMatches || timeMatches) {
+              targetRow = r + 2;
+              break;
+            }
+          }
+        }
+      }
+
+      // Vòng 2: Nếu chưa tìm thấy dòng chính xác theo thời gian/STT, mới lấy dòng gần nhất khớp Tên + Lớp
+      if (targetRow === -1 && rawTargetName) {
         for (var r = allRows.length - 1; r >= 0; r--) {
           var rName = removeAccents(String(allRows[r][nameColIdx] || ""));
           var rClass = removeAccents(String(allRows[r][classColIdx] || ""));
@@ -347,16 +378,13 @@ function doPost(e) {
         }
       }
 
-      // Ưu tiên 2: Tìm theo STT nếu chưa tìm thấy bằng tên
-      if (targetRow === -1 && data.stt !== undefined && data.stt !== null && String(data.stt).trim() !== "") {
-        var targetSTT = parseInt(data.stt, 10);
-        if (!isNaN(targetSTT) && targetSTT > 0) {
-          for (var r = 0; r < allRows.length; r++) {
-            var valSTT = parseInt(allRows[r][sttColIdx], 10);
-            if (valSTT === targetSTT) {
-              targetRow = r + 2;
-              break;
-            }
+      // Vòng 3: Tìm theo STT nếu chưa tìm thấy bằng tên
+      if (targetRow === -1 && targetSTT > 0) {
+        for (var r = 0; r < allRows.length; r++) {
+          var valSTT = parseInt(allRows[r][sttColIdx], 10);
+          if (valSTT === targetSTT) {
+            targetRow = r + 2;
+            break;
           }
         }
       }
@@ -370,17 +398,7 @@ function doPost(e) {
         targetRow = lastRow >= 2 ? lastRow : 2;
       }
 
-      // A. Cập nhật số điểm tổng mới của học sinh vào đúng ô cột Tổng điểm
-      if (scoreColIdx !== -1) {
-        sheet.getRange(targetRow, scoreColIdx + 1).setValue(totalScore);
-      }
-
-      // B. Cập nhật chuỗi Điểm từng câu / Chi tiết nếu có
-      if (detailColIdx !== -1 && scoreString) {
-        sheet.getRange(targetRow, detailColIdx + 1).setValue(scoreString);
-      }
-
-      // C. CẬP NHẬT ĐIỂM MỚI CỦA CÂU ĐÓ VÀO ĐÚNG CỘT CÂU TƯƠNG ỨNG TRÊN DATASHEET
+      // A. CẬP NHẬT ĐIỂM MỚI CỦA CÂU ĐÓ VÀO ĐÚNG CỘT CÂU TƯƠNG ỨNG TRÊN DATASHEET
       var targetOrderNum = data.targetOrderNumber !== undefined ? parseInt(data.targetOrderNumber, 10) : (e && e.parameter && e.parameter.targetOrderNumber ? parseInt(e.parameter.targetOrderNumber, 10) : -1);
       var targetQScore = data.questionScore !== undefined ? Number(data.questionScore) : (e && e.parameter && e.parameter.questionScore !== undefined ? Number(e.parameter.questionScore) : null);
 
@@ -390,7 +408,7 @@ function doPost(e) {
         }
       }
 
-      // D. Cập nhật tất cả các câu từ questionScores nếu có
+      // B. Cập nhật tất cả các câu từ questionScores nếu có
       var qScores = data.questionScores;
       if (qScores && typeof qScores === "object") {
         for (var qKey in qScores) {
@@ -401,13 +419,54 @@ function doPost(e) {
         }
       }
 
+      // C. TÍNH LẠI TỔNG SỐ ĐIỂM TỪ BÀI LÀM CỦA HỌC SINH (SUM TOÀN BỘ CÁC CỘT CÂU HỎI)
+      var finalCalculatedTotal = 0;
+      var hasComputedFromColumns = false;
+      var questionColKeys = Object.keys(questionCols);
+
+      if (questionColKeys.length > 0) {
+        // Đọc lại các ô câu hỏi thực tế trên dòng đó trong datasheet để tính tổng chính xác 100%
+        for (var i = 0; i < questionColKeys.length; i++) {
+          var qOrder = parseInt(questionColKeys[i], 10);
+          var colIdx = questionCols[qOrder];
+          var cellVal = sheet.getRange(targetRow, colIdx + 1).getValue();
+          var pts = 0;
+          if (typeof cellVal === "number") {
+            pts = cellVal;
+          } else if (cellVal !== "" && cellVal !== null && cellVal !== undefined) {
+            var parsedPts = parseFloat(String(cellVal).replace(",", "."));
+            if (!isNaN(parsedPts)) pts = parsedPts;
+          }
+          finalCalculatedTotal += pts;
+        }
+        hasComputedFromColumns = true;
+      } else if (qScores && typeof qScores === "object" && Object.keys(qScores).length > 0) {
+        for (var k in qScores) {
+          finalCalculatedTotal += Number(qScores[k]) || 0;
+        }
+        hasComputedFromColumns = true;
+      }
+
+      // Nếu tính được từ các cột câu hỏi thì dùng tổng này; nếu không, dùng totalScore từ client gửi lên
+      var finalTotalScore = hasComputedFromColumns ? (Math.round(finalCalculatedTotal * 100) / 100) : totalScore;
+
+      // D. Cập nhật số điểm tổng mới của học sinh vào đúng ô cột Tổng điểm
+      if (scoreColIdx !== -1) {
+        sheet.getRange(targetRow, scoreColIdx + 1).setValue(finalTotalScore);
+      }
+
+      // E. Cập nhật chuỗi Điểm từng câu / Chi tiết nếu có
+      if (detailColIdx !== -1 && scoreString) {
+        sheet.getRange(targetRow, detailColIdx + 1).setValue(scoreString);
+      }
+
       return ContentService.createTextOutput(JSON.stringify({
         status: "success",
         action: "updated",
-        message: "Đã cập nhật điểm mới vào datasheet tại dòng " + targetRow + " thành công!",
+        message: "Đã cập nhật điểm câu " + targetOrderNum + " và tính lại tổng điểm: " + finalTotalScore + " đ thành công!",
         row: targetRow,
         studentName: studentName,
-        totalScore: totalScore,
+        totalScore: finalTotalScore,
         targetOrderNumber: targetOrderNum,
         questionScore: targetQScore
       })).setMimeType(ContentService.MimeType.JSON);
@@ -1112,9 +1171,40 @@ function doPost(e) {
       var cleanTargetClass = removeAccents(className);
       var rawTargetName = cleanTargetName.replace(/\\s+/g, "");
       var rawTargetClass = cleanTargetClass.replace(/\\s+/g, "");
+      var targetSTT = (data.stt !== undefined && data.stt !== null && String(data.stt).trim() !== "") ? parseInt(data.stt, 10) : -1;
+      var cleanTargetEndTime = String(endTime || "").trim();
+      var cleanTargetStartTime = String(startTime || "").trim();
 
-      // Ưu tiên 1: Khớp chuẩn Họ tên + Lớp
+      // Vòng 1: Tìm CHÍNH XÁC lần làm bài khi học sinh làm nhiều lần (Khớp Tên + Lớp VÀ STT hoặc Thời gian nộp)
       if (rawTargetName) {
+        for (var rIdx = 0; rIdx < allRows.length; rIdx++) {
+          var rName = removeAccents(String(allRows[rIdx][nameColIdx] || ""));
+          var rClass = removeAccents(String(allRows[rIdx][classColIdx] || ""));
+          var rRawName = rName.replace(/\\s+/g, "");
+          var rRawClass = rClass.replace(/\\s+/g, "");
+
+          var nameMatches = (rName === cleanTargetName) || (rRawName === rawTargetName) || (rRawName && rawTargetName && (rRawName.indexOf(rawTargetName) !== -1 || rawTargetName.indexOf(rRawName) !== -1));
+          var classMatches = !rawTargetClass || !rRawClass || (rRawClass === rawTargetClass);
+
+          if (nameMatches && classMatches) {
+            var valSTT = parseInt(allRows[rIdx][sttColIdx], 10);
+            var valEndTime = String(allRows[rIdx][6] || "").trim();
+            var valStartTime = String(allRows[rIdx][5] || "").trim();
+
+            var sttMatches = (targetSTT > 0 && !isNaN(valSTT) && valSTT === targetSTT);
+            var timeMatches = (cleanTargetEndTime && (valEndTime === cleanTargetEndTime || valStartTime === cleanTargetEndTime)) ||
+                              (cleanTargetStartTime && (valStartTime === cleanTargetStartTime || valEndTime === cleanTargetStartTime));
+
+            if (sttMatches || timeMatches) {
+              targetRow = rIdx + 2;
+              break;
+            }
+          }
+        }
+      }
+
+      // Vòng 2: Nếu chưa tìm thấy dòng theo STT/thời gian, mới lấy dòng gần nhất khớp Tên + Lớp
+      if (targetRow === -1 && rawTargetName) {
         for (var rIdx = allRows.length - 1; rIdx >= 0; rIdx--) {
           var rName = removeAccents(String(allRows[rIdx][nameColIdx] || ""));
           var rClass = removeAccents(String(allRows[rIdx][classColIdx] || ""));
@@ -1131,16 +1221,13 @@ function doPost(e) {
         }
       }
 
-      // Ưu tiên 2: Khớp theo STT nếu chưa tìm thấy bằng Họ tên
-      if (targetRow === -1 && data.stt !== undefined && data.stt !== null && String(data.stt).trim() !== "") {
-        var targetSTT = parseInt(data.stt, 10);
-        if (!isNaN(targetSTT) && targetSTT > 0) {
-          for (var r2Idx = 0; r2Idx < allRows.length; r2Idx++) {
-            var valSTT = parseInt(allRows[r2Idx][sttColIdx], 10);
-            if (valSTT === targetSTT) {
-              targetRow = r2Idx + 2;
-              break;
-            }
+      // Vòng 3: Khớp theo STT nếu chưa tìm thấy bằng Họ tên
+      if (targetRow === -1 && targetSTT > 0) {
+        for (var r2Idx = 0; r2Idx < allRows.length; r2Idx++) {
+          var valSTT = parseInt(allRows[r2Idx][sttColIdx], 10);
+          if (valSTT === targetSTT) {
+            targetRow = r2Idx + 2;
+            break;
           }
         }
       }
@@ -1153,17 +1240,7 @@ function doPost(e) {
         targetRow = lastRow2 >= 2 ? lastRow2 : 2;
       }
 
-      // A. Cập nhật Tổng điểm vào cột Tổng điểm
-      if (scoreColIdx !== -1) {
-        sheet2.getRange(targetRow, scoreColIdx + 1).setValue(totalScore);
-      }
-
-      // B. Cập nhật chuỗi Điểm từng câu vào cột Chi tiết
-      if (detailColIdx !== -1 && scoreString) {
-        sheet2.getRange(targetRow, detailColIdx + 1).setValue(scoreString);
-      }
-
-      // C. CẬP NHẬT ĐIỂM MỚI CỦA CÂU ĐÓ VÀO ĐÚNG CỘT CÂU TƯƠNG ỨNG TRÊN DATASHEET
+      // A. CẬP NHẬT ĐIỂM MỚI CỦA CÂU ĐÓ VÀO ĐÚNG CỘT CÂU TƯƠNG ỨNG TRÊN DATASHEET
       var targetOrderNum = data.targetOrderNumber !== undefined ? parseInt(data.targetOrderNumber, 10) : (e && e.parameter && e.parameter.targetOrderNumber ? parseInt(e.parameter.targetOrderNumber, 10) : -1);
       var targetQScore = data.questionScore !== undefined ? Number(data.questionScore) : (e && e.parameter && e.parameter.questionScore !== undefined ? Number(e.parameter.questionScore) : null);
 
@@ -1173,7 +1250,7 @@ function doPost(e) {
         }
       }
 
-      // D. Cập nhật toàn bộ các câu nếu có danh sách questionScores
+      // B. Cập nhật toàn bộ các câu nếu có danh sách questionScores
       var qScores = data.questionScores;
       if (qScores && typeof qScores === "object") {
         for (var qK in qScores) {
@@ -1184,13 +1261,52 @@ function doPost(e) {
         }
       }
 
+      // C. TÍNH LẠI TỔNG SỐ ĐIỂM TỪ BÀI LÀM CỦA HỌC SINH (SUM TOÀN BỘ CÁC CỘT CÂU HỎI)
+      var finalCalculatedTotal = 0;
+      var hasComputedFromColumns = false;
+      var questionColKeys = Object.keys(questionCols);
+
+      if (questionColKeys.length > 0) {
+        for (var cIdx = 0; cIdx < questionColKeys.length; cIdx++) {
+          var qOrderN = parseInt(questionColKeys[cIdx], 10);
+          var qColPos = questionCols[qOrderN];
+          var cellVal = sheet2.getRange(targetRow, qColPos + 1).getValue();
+          var pts = 0;
+          if (typeof cellVal === "number") {
+            pts = cellVal;
+          } else if (cellVal !== "" && cellVal !== null && cellVal !== undefined) {
+            var parsedPts = parseFloat(String(cellVal).replace(",", "."));
+            if (!isNaN(parsedPts)) pts = parsedPts;
+          }
+          finalCalculatedTotal += pts;
+        }
+        hasComputedFromColumns = true;
+      } else if (qScores && typeof qScores === "object" && Object.keys(qScores).length > 0) {
+        for (var k2 in qScores) {
+          finalCalculatedTotal += Number(qScores[k2]) || 0;
+        }
+        hasComputedFromColumns = true;
+      }
+
+      var finalTotalScore = hasComputedFromColumns ? (Math.round(finalCalculatedTotal * 100) / 100) : totalScore;
+
+      // D. Cập nhật Tổng điểm vào cột Tổng điểm
+      if (scoreColIdx !== -1) {
+        sheet2.getRange(targetRow, scoreColIdx + 1).setValue(finalTotalScore);
+      }
+
+      // E. Cập nhật chuỗi Điểm từng câu vào cột Chi tiết
+      if (detailColIdx !== -1 && scoreString) {
+        sheet2.getRange(targetRow, detailColIdx + 1).setValue(scoreString);
+      }
+
       return ContentService.createTextOutput(JSON.stringify({
         status: "success",
         action: "updated",
-        message: "Đã cập nhật điểm vào datasheet tại dòng " + targetRow + " thành công!",
+        message: "Đã cập nhật điểm câu " + targetOrderNum + " và tính lại tổng điểm: " + finalTotalScore + " đ thành công!",
         row: targetRow,
         studentName: studentName,
-        totalScore: totalScore,
+        totalScore: finalTotalScore,
         targetOrderNumber: targetOrderNum,
         questionScore: targetQScore
       })).setMimeType(ContentService.MimeType.JSON);

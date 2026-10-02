@@ -265,5 +265,19 @@ export function overrideEssayGrade(
     ...submission,
     totalScore: newTotalScore,
     scoreString: newScoreString,
+    questionResults: newResults.map((r) => {
+      const existingQ = submission.questionResults?.find((q) => q.orderNumber === r.orderNumber);
+      const matchedQ = questions?.find((q) => (q.orderNumber || 0) === r.orderNumber);
+      return {
+        questionId: existingQ?.questionId || matchedQ?.id || r.orderNumber,
+        orderNumber: r.orderNumber,
+        studentAnswer: r.studentAnswer,
+        correctAnswer: existingQ?.correctAnswer || matchedQ?.correctAnswer || '',
+        isCorrect: r.earnedPoints > 0,
+        earnedPoints: r.earnedPoints,
+        maxPoints: existingQ?.maxPoints || matchedQ?.points || (r.earnedPoints > 0 ? r.earnedPoints : 1),
+        category: existingQ?.category || matchedQ?.category || 'Chung',
+      };
+    }),
   };
 }
