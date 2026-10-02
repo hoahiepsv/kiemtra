@@ -79,6 +79,7 @@ export default function App() {
           parsed.data2Url.includes('AKfycbzS107icL7jGKWU8gZFzC87WeJCRkBYxmTnqJNAwu63Vm1QZomRjn2P2JczWS5OguLn') ||
           parsed.data2Url.includes('AKfycbzNodWtP-Y8mIC1ZFkH9iNCH7mhZYmUXDrlNL4-haoZ8OwUOBfMcYWmJwmDR_EHUPis') ||
           parsed.data2Url.includes('AKfycbxdcQlU6nlvMStQ4ZFKv_8PcZwrpZGhMIMBS2F_Zbs5anKC6ohq1xJZj07lp-wg6yAS') ||
+          parsed.data2Url.includes('AKfycby75dcZbrgLbtg2tymL47LqvmkItG1RD4Tab7dPStqMxyw8k2MGtP_zur7qwkAI_OJU') ||
           parsed.data2Url.includes('AKfycbyn8IZAj243ZY4mkSVfAkZhUICFWwmKFq-FmjuYDZ4A1ghDhmuAri6Y9z61JlDBu8FY');
         const activeData2Url = isOldData2 ? DEFAULT_EXAM_CONFIG.data2Url : normalizeAppsScriptUrl(parsed.data2Url);
         return {
