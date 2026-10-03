@@ -131,7 +131,77 @@ export function joinAcceptableAnswers(answers: (string | undefined | null)[]): s
 }
 
 /**
+ * Làm sạch các tiền tố và hậu tố thông dụng trong câu trả lời tự luận của học sinh:
+ * - Tiền tố: "dạ", "thưa thầy", "đáp số", "đáp án là", "kết quả", "bằng", "em tính ra",...
+ * - Hậu tố: "ạ", "thưa thầy", "nhé", "nha", dấu chấm, dấu than,...
+ */
+export function cleanPrefixesAndSuffixes(text: string): string {
+  if (!text) return '';
+  let str = String(text).trim();
+
+  // 1. Lột bỏ dấu ngoặc, dấu nháy bao quanh ngoài cùng
+  str = str.replace(/^["'“”‘’\(\[\{]+|["'“”‘’\)\]\}]+$/g, '').trim();
+
+  // 2. Danh sách các regex tiền tố tiếng Việt phổ biến của học sinh
+  const prefixRegexes = [
+    // Chào hỏi, kính ngữ
+    /^(?:kính\s+thưa|em\s+thưa|dạ\s+thưa|thưa)\s+(?:thầy\s+cô|thầy|cô)\s*[:,-]?\s*/i,
+    /^(?:dạ|da)\s*[:,-]?\s*/i,
+    /^(?:em\s+thưa|thưa)\s*[:,-]?\s*/i,
+    // Số câu (câu 1:, c1:, q1:, bài 1:)
+    /^(?:câu|cau|bài|bai|c|q)\s*\d+\s*[:.-]\s*/i,
+    // Từ khóa kết quả, đáp số
+    /^(?:đáp\s+số|dap\s+so|đáp\s+án|dap\s+an|kết\s+quả|ket\s+qua|câu\s+trả\s+lời|cau\s+tra\s+loi|trả\s+lời|tra\s+loi|bài\s+làm|bai\s+lam|đs|ds|kq|da|ans)\s*[:=.-]?\s*/i,
+    // Thao tác / suy nghĩ của học sinh
+    /^(?:theo\s+em(?:\s+thì|\s+thấy)?|theo\s+e|em\s+nghĩ(?:\s+là)?|em\s+nghi|em\s+tính\s+ra(?:\s+được)?|em\s+tinh\s+ra|em\s+chọn(?:\s+đáp\s+án)?|em\s+chon|em\s+làm\s+ra|em\s+lam\s+ra|tính\s+ra(?:\s+được)?|tinh\s+ra)\s*[:,-]?\s*/i,
+    // Liên từ, khẳng định, ước lượng
+    /^(?:là|la|bằng|bang|bằng\s+khoảng|khoảng|khoang|xấp\s+xỉ|xap\s+xi|chừng|tầm|gần\s+bằng|ra|được|duoc)\s*[:=]?\s*/i,
+    // Phép gán kết quả (VD: x = 1234, kết quả = 1234)
+    /^[a-zA-Z\d\s]+\s*=\s*/i,
+  ];
+
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < 10) {
+    changed = false;
+    guard++;
+    for (const rx of prefixRegexes) {
+      if (rx.test(str)) {
+        str = str.replace(rx, '').trim();
+        changed = true;
+      }
+    }
+  }
+
+  // 3. Danh sách các regex hậu tố tiếng Việt phổ biến
+  const suffixRegexes = [
+    // Dấu câu ở cuối
+    /[.,;:!?'"“”‘’~]+$/i,
+    // Kính ngữ, từ cảm thán ở cuối
+    /\s+(?:ạ|a|thưa\s+thầy|thua\s+thay|thưa\s+cô|thua\s+co|thưa\s+thầy\s+cô|thua\s+thay\s+co|nhé\s+thầy|nhé\s+cô|nhé|nhe|nha|nhen|ạ\s+thầy|ạ\s+cô|ạ\s+em\s+cảm\s+ơn|ạ\s+ạ)[.,;:!?]*$/i,
+    // Dấu câu còn sót lại
+    /[.,;:!?'"“”‘’~]+$/i,
+  ];
+
+  changed = true;
+  guard = 0;
+  while (changed && guard < 10) {
+    changed = false;
+    guard++;
+    for (const sRx of suffixRegexes) {
+      if (sRx.test(str)) {
+        str = str.replace(sRx, '').trim();
+        changed = true;
+      }
+    }
+  }
+
+  return str;
+}
+
+/**
  * So khớp một phương án đáp án đơn lẻ với câu trả lời của học sinh
+ * Hỗ trợ nhận diện thông minh tiền tố, hậu tố, dấu phân cách nghìn và đơn vị đo
  */
 function checkSingleEssayMatch(rawStudent: string, rawOption: string): boolean {
   if (!rawStudent || !rawOption) return false;
@@ -146,9 +216,23 @@ function checkSingleEssayMatch(rawStudent: string, rawOption: string): boolean {
   const cNoSpace = cNorm.replace(/\s+/g, '');
   if (sNoSpace && sNoSpace === cNoSpace) return true;
 
-  // 3. So khớp dạng số: phân tách hàng nghìn (1.000 vs 1,000 vs 1000)
-  const sNoNumSeparator = sNoSpace.replace(/[.,]/g, '');
-  const cNoNumSeparator = cNoSpace.replace(/[.,]/g, '');
+  // 3. So khớp sau khi làm sạch tiền tố và hậu tố (Prefixes & Suffixes)
+  // Xử lý hoàn hảo: "đáp số 1234 thưa thầy", "thưa thầy là 1234 ạ", "bằng 3072 GB", "theo em là thông tin thưa cô"
+  const sCleaned = cleanPrefixesAndSuffixes(rawStudent);
+  const cCleaned = cleanPrefixesAndSuffixes(rawOption);
+
+  const sCleanNorm = normalizeKeywords(sCleaned);
+  const cCleanNorm = normalizeKeywords(cCleaned);
+  if (sCleanNorm === cCleanNorm) return true;
+
+  const sCleanNoSpace = sCleanNorm.replace(/\s+/g, '');
+  const cCleanNoSpace = cCleanNorm.replace(/\s+/g, '');
+  if (sCleanNoSpace && sCleanNoSpace === cCleanNoSpace) return true;
+
+  // 4. So khớp số học thông minh:
+  // Phân tách hàng nghìn (1.234 vs 1234 vs 1,234 vs 1 234)
+  const sNoNumSeparator = sCleanNoSpace.replace(/[.,]/g, '');
+  const cNoNumSeparator = cCleanNoSpace.replace(/[.,]/g, '');
   if (
     sNoNumSeparator &&
     cNoNumSeparator &&
@@ -158,15 +242,37 @@ function checkSingleEssayMatch(rawStudent: string, rawOption: string): boolean {
     return true;
   }
 
-  // 4. So khớp số thập phân (thay dấu phẩy bằng dấu chấm: 0,25 vs 0.25)
-  const sDecimal = sNoSpace.replace(/,/g, '.');
-  const cDecimal = cNoSpace.replace(/,/g, '.');
+  // So khớp số thập phân (thay dấu phẩy bằng dấu chấm: 0,25 vs 0.25)
+  const sDecimal = sCleanNoSpace.replace(/,/g, '.');
+  const cDecimal = cCleanNoSpace.replace(/,/g, '.');
   if (sDecimal === cDecimal) return true;
 
   const numS = Number(sDecimal);
   const numC = Number(cDecimal);
   if (!isNaN(numS) && !isNaN(numC) && numS === numC) {
     return true;
+  }
+
+  // 5. So khớp số kèm đơn vị đo (VD: Đáp án chuẩn "3072" mà HS gõ "3072 GB" hoặc ngược lại)
+  const unitRegex = /\s*(?:gb|mb|kb|tb|byte|bit|gigabyte|megabyte|kilobyte|terabyte|bo\s+phim|hoc\s+sinh|trang|anh|buc\s+anh|tep|file|m|cm|km|kg|gam|g|lit|l|s|giay|phut|gio|%)\.?$/i;
+  const sNoUnit = sCleanNorm.replace(unitRegex, '').trim();
+  const cNoUnit = cCleanNorm.replace(unitRegex, '').trim();
+  if (sNoUnit && cNoUnit) {
+    if (sNoUnit === cNoUnit) return true;
+    if (sNoUnit.replace(/[.,\s]/g, '') === cNoUnit.replace(/[.,\s]/g, '')) return true;
+  }
+
+  // 6. Nhận diện số cốt lõi trong câu trả lời tự luận của học sinh:
+  // Nếu đáp án chuẩn là một con số (VD: cNoNumSeparator = "1234" hoặc "3072"):
+  // Kiểm tra nếu trong câu trả lời đã làm sạch của học sinh có chứa con số này như một cụm số độc lập
+  if (/^\d+$/.test(cNoNumSeparator) && cNoNumSeparator.length >= 2) {
+    const targetNum = cNoNumSeparator;
+    // Chuẩn hóa câu học sinh bằng cách gỡ dấu phân tách nghìn trong các cụm số
+    const sNormalizedNumbers = sCleanNorm.replace(/(\d+)[.,](\d{3})/g, '$1$2');
+    const numberWordRegex = new RegExp(`(?:^|[^\\d])${targetNum}(?:[^\\d]|$)`);
+    if (numberWordRegex.test(sNormalizedNumbers)) {
+      return true;
+    }
   }
 
   return false;
