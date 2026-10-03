@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trophy, Medal, Search, X, Flame } from 'lucide-react';
+import { Trophy, Medal, Search, X, Flame, ChevronDown } from 'lucide-react';
 import { SubmissionRecord } from '../types';
 import { matchSearchQuery } from '../utils/gradeService';
 
@@ -83,19 +83,22 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <span className="text-xs text-slate-500 font-medium">Lọc theo lớp:</span>
-            <select
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:border-sky-500 uppercase"
-            >
-              <option value="all">Tất cả các lớp</option>
-              {classes.map((cls) => (
-                <option key={cls} value={cls}>
-                  Lớp {cls}
-                </option>
-              ))}
-            </select>
+            <span className="text-xs text-slate-500 font-medium whitespace-nowrap">Lớp:</span>
+            <div className="relative flex-1 sm:w-auto">
+              <select
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="w-full appearance-none pl-3 pr-8 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-white focus:outline-hidden focus:border-sky-500 cursor-pointer"
+              >
+                <option value="all">Tất cả các lớp</option>
+                {classes.map((cls) => (
+                  <option key={cls} value={cls}>
+                    Lớp {cls}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
         </div>
 

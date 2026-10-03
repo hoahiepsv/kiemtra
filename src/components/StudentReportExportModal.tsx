@@ -20,6 +20,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
 } from 'lucide-react';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
 import {
@@ -30,7 +31,7 @@ import {
   updateSubmissionInHistory,
   sendSubmissionToData2,
 } from '../utils/syncService';
-import { matchSearchQuery, overrideEssayGrade } from '../utils/gradeService';
+import { matchSearchQuery, overrideEssayGrade, autoRegradeAllSubmissions } from '../utils/gradeService';
 import { StudentReportCard } from './StudentReportCard';
 import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
 import { toPng } from 'html-to-image';
@@ -169,6 +170,12 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
         loadedList = localList;
         setLoadSource('local');
       }
+    }
+
+    // Tự động nhận diện và tính lại điểm cho các câu tự luận có đáp án tương đương (3TB=3072GB, 3072GB, 1.234...)
+    if (questions && questions.length > 0 && loadedList.length > 0) {
+      const { updatedList } = autoRegradeAllSubmissions(loadedList, questions);
+      loadedList = updatedList;
     }
 
     setStudents(loadedList);
@@ -431,11 +438,11 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
               />
             </div>
 
-            <div className="w-28 sm:w-44 flex-shrink-0">
+            <div className="w-32 sm:w-44 flex-shrink-0 relative">
               <select
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
-                className="w-full px-2 py-1 sm:py-1.5 text-xs bg-white border border-slate-200 rounded-lg sm:rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                className="w-full appearance-none pl-2.5 pr-7 py-1 sm:py-1.5 text-xs bg-white border border-slate-200 rounded-lg sm:rounded-xl focus:outline-hidden focus:ring-1 focus:ring-emerald-500 font-medium cursor-pointer"
               >
                 <option value="ALL">Tất cả lớp ({classOptions.length})</option>
                 {classOptions.map((cls) => {
@@ -449,6 +456,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                   );
                 })}
               </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
             <button
