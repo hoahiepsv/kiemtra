@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   FileSpreadsheet,
@@ -15,6 +15,9 @@ import {
   GraduationCap,
   Clock,
   Sparkles,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toPng } from 'html-to-image';
@@ -23,6 +26,7 @@ import {
   fetchSubmissionsFromData2,
   getSubmissionHistory,
   compareSubmissionsNewestFirst,
+  parseSubmissionDateTime,
 } from '../utils/syncService';
 import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
 import { matchSearchQuery, autoRegradeAllSubmissions } from '../utils/gradeService';
@@ -47,6 +51,12 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingImage, setIsExportingImage] = useState(false);
   const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+
+  // Sắp xếp cột linh hoạt: STT, Họ tên, Lớp, Tổng điểm, Xếp loại, Thời gian, Nộp lúc
+  type SortField = 'stt' | 'name' | 'class' | 'score' | 'rank' | 'duration' | 'submittedAt';
+  type SortDirection = 'asc' | 'desc';
+  const [sortField, setSortField] = useState<SortField>('stt');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   // Ref chứa bảng điểm để chụp xuất file ảnh sắc nét
   const imageExportRef = useRef<HTMLDivElement>(null);
@@ -89,8 +99,6 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   // Lấy danh sách lớp học duy nhất
   const classList: string[] = Array.from(
     new Set(students.map((s) => (s.className || '').trim().toUpperCase()))
@@ -108,6 +116,125 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
       matchSearchQuery(s.className, searchKeyword);
     return matchClass && matchSearch;
   });
+
+  // Trích xuất tên học sinh (từ cuối cùng) để sắp xếp đúng bảng chữ cái tiếng Việt (Họ và Tên -> Tên)
+  const getLastName = (fullName: string) => {
+    const parts = (fullName || '').trim().split(/\s+/);
+    return parts.length > 0 ? parts[parts.length - 1] : fullName;
+  };
+
+  // Tính thời lượng làm bài theo giây để so sánh chuẩn xác
+  const getDurationSeconds = (s: SubmissionRecord): number => {
+    if (typeof s.totalDuration === 'string') {
+      const parts = s.totalDuration.split(':');
+      if (parts.length === 2) {
+        const m = parseInt(parts[0], 10) || 0;
+        const sec = parseInt(parts[1], 10) || 0;
+        return m * 60 + sec;
+      }
+    }
+    const start = parseSubmissionDateTime(s.startTime);
+    const end = parseSubmissionDateTime(s.endTime);
+    if (start > 0 && end > start) {
+      return Math.floor((end - start) / 1000);
+    }
+    return 0;
+  };
+
+  // Trọng số xếp loại học lực để sắp xếp
+  const getRankWeight = (score: number) => {
+    if (score >= 9.0) return 5;
+    if (score >= 8.0) return 4;
+    if (score >= 6.5) return 3;
+    if (score >= 5.0) return 2;
+    return 1;
+  };
+
+  // Hàm sắp xếp danh sách bài làm linh hoạt theo cột
+  const sortSubmissionList = (
+    list: SubmissionRecord[],
+    field: SortField,
+    direction: SortDirection
+  ): SubmissionRecord[] => {
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      let result = 0;
+      switch (field) {
+        case 'stt': {
+          const sttA = Number(a.stt) || 0;
+          const sttB = Number(b.stt) || 0;
+          result = sttA - sttB;
+          break;
+        }
+        case 'name': {
+          const lastNameA = getLastName(a.studentName);
+          const lastNameB = getLastName(b.studentName);
+          result =
+            lastNameA.localeCompare(lastNameB, 'vi', { sensitivity: 'base' }) ||
+            a.studentName.localeCompare(b.studentName, 'vi', { sensitivity: 'base' });
+          break;
+        }
+        case 'class': {
+          result = (a.className || '')
+            .trim()
+            .localeCompare((b.className || '').trim(), 'vi', { numeric: true });
+          break;
+        }
+        case 'score': {
+          result = (a.totalScore || 0) - (b.totalScore || 0);
+          break;
+        }
+        case 'rank': {
+          const rankA = getRankWeight(a.totalScore || 0);
+          const rankB = getRankWeight(b.totalScore || 0);
+          result = rankA !== rankB ? rankA - rankB : (a.totalScore || 0) - (b.totalScore || 0);
+          break;
+        }
+        case 'duration': {
+          result = getDurationSeconds(a) - getDurationSeconds(b);
+          break;
+        }
+        case 'submittedAt': {
+          const timeA = parseSubmissionDateTime(a.endTime) || a.timestamp || 0;
+          const timeB = parseSubmissionDateTime(b.endTime) || b.timestamp || 0;
+          result = timeA - timeB;
+          break;
+        }
+        default:
+          result = 0;
+      }
+
+      // Khi kết quả bằng nhau, dự phòng sắp xếp theo STT
+      if (result === 0) {
+        const sttA = Number(a.stt) || 0;
+        const sttB = Number(b.stt) || 0;
+        result = sttA - sttB;
+      }
+
+      return direction === 'asc' ? result : -result;
+    });
+    return sorted;
+  };
+
+  // Danh sách đã được lọc và sắp xếp theo tương tác người dùng
+  const sortedFilteredStudents = useMemo(() => {
+    return sortSubmissionList(filteredStudents, sortField, sortDirection);
+  }, [filteredStudents, sortField, sortDirection]);
+
+  // Xử lý khi bấm vào tiêu đề cột để sắp xếp
+  const handleSortClick = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      // Mặc định chiều: Họ tên, Lớp, Thời gian tăng dần; STT, Điểm, Xếp loại, Nộp lúc giảm dần
+      if (field === 'name' || field === 'class' || field === 'duration') {
+        setSortDirection('asc');
+      } else {
+        setSortDirection('desc');
+      }
+    }
+  };
 
   // Đánh giá xếp loại học lực theo thang điểm 10
   const getGradeRank = (score: number) => {
@@ -252,7 +379,7 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
           ? 'Tong_Hop'
           : `Lop_${selectedClass.replace(/[^a-zA-Z0-9]/g, '')}`;
 
-      const rows = buildSheetData(filteredStudents, titlePrefix);
+      const rows = buildSheetData(sortedFilteredStudents, titlePrefix);
       const ws = XLSX.utils.aoa_to_sheet(rows);
       ws['!cols'] = getColWidths();
 
@@ -275,14 +402,15 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
     }
   };
 
-  // 2. Xuất toàn bộ các lớp (Mỗi lớp 1 Sheet + 1 Sheet Tổng hợp, đều đúng 7 cột)
+  // 2. Xuất toàn bộ các lớp (Mỗi lớp 1 Sheet + 1 Sheet Tổng hợp, đều đúng 7 cột, giữ nguyên thứ tự sắp xếp)
   const handleExportAllClassesMultiSheet = () => {
     try {
       setIsExporting(true);
       const wb = XLSX.utils.book_new();
 
-      // Sheet Tổng hợp
-      const overallRows = buildSheetData(students, 'Toàn bộ học sinh đã nộp');
+      // Sheet Tổng hợp (áp dụng cùng thứ tự sắp xếp đang chọn)
+      const sortedAllStudents = sortSubmissionList(students, sortField, sortDirection);
+      const overallRows = buildSheetData(sortedAllStudents, 'Toàn bộ học sinh đã nộp');
       const wsOverall = XLSX.utils.aoa_to_sheet(overallRows);
       wsOverall['!cols'] = getColWidths();
       XLSX.utils.book_append_sheet(wb, wsOverall, 'Tong_Hop_Chung');
@@ -293,8 +421,9 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
           (s) => (s.className || '').trim().toUpperCase() === cls
         );
         if (classStudents.length > 0) {
+          const sortedClassStudents = sortSubmissionList(classStudents, sortField, sortDirection);
           const sheetName = `Lop_${cls.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}`;
-          const classRows = buildSheetData(classStudents, `Lớp ${cls}`);
+          const classRows = buildSheetData(sortedClassStudents, `Lớp ${cls}`);
           const wsClass = XLSX.utils.aoa_to_sheet(classRows);
           wsClass['!cols'] = getColWidths();
           XLSX.utils.book_append_sheet(wb, wsClass, sheetName);
@@ -347,6 +476,8 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
       setIsExportingImage(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-1 sm:p-4">
@@ -493,7 +624,7 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
             </div>
           </div>
 
-          {/* Row 2: Thống kê mini */}
+          {/* Row 2: Thống kê mini & Trạng thái sắp xếp */}
           <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-3 pt-1.5 border-t border-slate-200/80 text-[11px] sm:text-xs text-slate-600">
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap font-medium">
               <span>Sĩ số: <strong className="text-slate-900 font-bold">{totalCount}</strong> em</span>
@@ -511,12 +642,29 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
               )}
             </div>
 
+            {/* Chỉ báo cột đang sắp xếp - Bấm vào chữ cột để đổi */}
+            <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-slate-500 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-2xs">
+              <span className="hidden xs:inline">Xếp theo:</span>
+              <strong className="text-emerald-800 font-bold">
+                {sortField === 'stt' && 'STT'}
+                {sortField === 'name' && 'Họ tên'}
+                {sortField === 'class' && 'Lớp'}
+                {sortField === 'score' && 'Tổng điểm'}
+                {sortField === 'rank' && 'Xếp loại'}
+                {sortField === 'duration' && 'Thời gian'}
+                {sortField === 'submittedAt' && 'Nộp lúc'}
+              </strong>
+              <span className="text-emerald-600 font-bold">
+                {sortDirection === 'asc' ? '↑ Tăng' : '↓ Giảm'}
+              </span>
+            </div>
+
             {/* Các nút xuất tài liệu trên Mobile */}
             <div className="flex items-center gap-1 sm:hidden w-full justify-between pt-1">
               <button
                 type="button"
                 onClick={handleExportImage}
-                disabled={isExportingImage || filteredStudents.length === 0}
+                disabled={isExportingImage || sortedFilteredStudents.length === 0}
                 className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-amber-500 text-amber-950 text-[11px] font-bold shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
               >
                 {isExportingImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImageIcon className="w-3 h-3" />}
@@ -525,7 +673,7 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
               <button
                 type="button"
                 onClick={handleExportSelectedClass}
-                disabled={isExporting || filteredStudents.length === 0}
+                disabled={isExporting || sortedFilteredStudents.length === 0}
                 className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
               >
                 <Download className="w-3 h-3" />
@@ -544,29 +692,133 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
           </div>
         </div>
 
-        {/* BẢNG HIỂN THỊ TRÊN MÀN HÌNH - CHUẨN 7 CỘT */}
+        {/* BẢNG HIỂN THỊ TRÊN MÀN HÌNH - CHUẨN 7 CỘT (HỖ TRỢ BẤM VÀO TIÊU ĐỀ ĐỂ SẮP XẾP) */}
         <div className="flex-1 overflow-auto bg-white">
           <table className="w-full text-xs text-left border-collapse">
             <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0 border-b border-slate-200 z-10 shadow-2xs">
               <tr>
-                <th className="p-2.5 text-center w-12">STT</th>
-                <th className="p-2.5 min-w-[160px]">Họ tên</th>
-                <th className="p-2.5 text-center w-16">Lớp</th>
-                <th className="p-2.5 text-center w-24">Tổng điểm</th>
-                <th className="p-2.5 text-center w-24">Xếp loại</th>
-                <th className="p-2.5 text-center w-28">Thời gian</th>
-                <th className="p-2.5 text-center w-36">Nộp lúc</th>
+                {/* 1. STT */}
+                <th
+                  onClick={() => handleSortClick('stt')}
+                  className="p-2.5 text-center w-14 cursor-pointer select-none transition-colors hover:bg-slate-200/90 active:bg-slate-300 group"
+                  title="Bấm để sắp xếp theo STT (bấm để đảo chiều tăng/giảm)"
+                >
+                  <div className={`inline-flex items-center justify-center gap-1 font-bold ${sortField === 'stt' ? 'text-emerald-700' : 'text-slate-700 group-hover:text-slate-900'}`}>
+                    <span>STT</span>
+                    {sortField === 'stt' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60 group-hover:opacity-100" />
+                    )}
+                  </div>
+                </th>
+
+                {/* 2. Họ tên */}
+                <th
+                  onClick={() => handleSortClick('name')}
+                  className="p-2.5 min-w-[170px] cursor-pointer select-none transition-colors hover:bg-slate-200/90 active:bg-slate-300 group"
+                  title="Bấm để sắp xếp theo Họ và tên học sinh (A-Z hoặc Z-A)"
+                >
+                  <div className={`inline-flex items-center gap-1 font-bold ${sortField === 'name' ? 'text-emerald-700' : 'text-slate-700 group-hover:text-slate-900'}`}>
+                    <span>Họ tên</span>
+                    {sortField === 'name' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60 group-hover:opacity-100" />
+                    )}
+                  </div>
+                </th>
+
+                {/* 3. Lớp */}
+                <th
+                  onClick={() => handleSortClick('class')}
+                  className="p-2.5 text-center w-16 cursor-pointer select-none transition-colors hover:bg-slate-200/90 active:bg-slate-300 group"
+                  title="Bấm để sắp xếp theo Tên lớp học"
+                >
+                  <div className={`inline-flex items-center justify-center gap-1 font-bold ${sortField === 'class' ? 'text-emerald-700' : 'text-slate-700 group-hover:text-slate-900'}`}>
+                    <span>Lớp</span>
+                    {sortField === 'class' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60 group-hover:opacity-100" />
+                    )}
+                  </div>
+                </th>
+
+                {/* 4. Tổng điểm */}
+                <th
+                  onClick={() => handleSortClick('score')}
+                  className="p-2.5 text-center w-24 cursor-pointer select-none transition-colors hover:bg-slate-200/90 active:bg-slate-300 group"
+                  title="Bấm để sắp xếp theo Tổng điểm (từ cao xuống thấp hoặc từ thấp lên cao)"
+                >
+                  <div className={`inline-flex items-center justify-center gap-1 font-bold ${sortField === 'score' ? 'text-emerald-700' : 'text-slate-700 group-hover:text-slate-900'}`}>
+                    <span>Tổng điểm</span>
+                    {sortField === 'score' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60 group-hover:opacity-100" />
+                    )}
+                  </div>
+                </th>
+
+                {/* 5. Xếp loại */}
+                <th
+                  onClick={() => handleSortClick('rank')}
+                  className="p-2.5 text-center w-24 cursor-pointer select-none transition-colors hover:bg-slate-200/90 active:bg-slate-300 group"
+                  title="Bấm để sắp xếp theo Xếp loại học lực"
+                >
+                  <div className={`inline-flex items-center justify-center gap-1 font-bold ${sortField === 'rank' ? 'text-emerald-700' : 'text-slate-700 group-hover:text-slate-900'}`}>
+                    <span>Xếp loại</span>
+                    {sortField === 'rank' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60 group-hover:opacity-100" />
+                    )}
+                  </div>
+                </th>
+
+                {/* 6. Thời gian */}
+                <th
+                  onClick={() => handleSortClick('duration')}
+                  className="p-2.5 text-center w-28 cursor-pointer select-none transition-colors hover:bg-slate-200/90 active:bg-slate-300 group"
+                  title="Bấm để sắp xếp theo Thời gian làm bài"
+                >
+                  <div className={`inline-flex items-center justify-center gap-1 font-bold ${sortField === 'duration' ? 'text-emerald-700' : 'text-slate-700 group-hover:text-slate-900'}`}>
+                    <span>Thời gian</span>
+                    {sortField === 'duration' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60 group-hover:opacity-100" />
+                    )}
+                  </div>
+                </th>
+
+                {/* 7. Nộp lúc */}
+                <th
+                  onClick={() => handleSortClick('submittedAt')}
+                  className="p-2.5 text-center w-36 cursor-pointer select-none transition-colors hover:bg-slate-200/90 active:bg-slate-300 group"
+                  title="Bấm để sắp xếp theo Thời điểm nộp bài (mới nhất lên trước hoặc cũ nhất)"
+                >
+                  <div className={`inline-flex items-center justify-center gap-1 font-bold ${sortField === 'submittedAt' ? 'text-emerald-700' : 'text-slate-700 group-hover:text-slate-900'}`}>
+                    <span>Nộp lúc</span>
+                    {sortField === 'submittedAt' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60 group-hover:opacity-100" />
+                    )}
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-sans">
-              {filteredStudents.length === 0 ? (
+              {sortedFilteredStudents.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-slate-400">
                     Không có học sinh nào phù hợp với bộ lọc.
                   </td>
                 </tr>
               ) : (
-                filteredStudents.map((s, idx) => {
+                sortedFilteredStudents.map((s, idx) => {
                   const isHigh = s.totalScore >= 8.0;
                   const isLow = s.totalScore < 5.0;
 
@@ -675,6 +927,9 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
                 <p className="text-[11px] text-slate-400 mt-1 font-mono">
                   Ngày xuất: {new Date().toLocaleDateString('vi-VN')}
                 </p>
+                <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                  Xếp theo: {sortField === 'stt' ? 'STT' : sortField === 'name' ? 'Họ tên' : sortField === 'class' ? 'Lớp' : sortField === 'score' ? 'Tổng điểm' : sortField === 'rank' ? 'Xếp loại' : sortField === 'duration' ? 'Thời gian' : 'Nộp lúc'} ({sortDirection === 'asc' ? 'Tăng dần' : 'Giảm dần'})
+                </p>
               </div>
             </div>
 
@@ -713,7 +968,7 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
               </tr>
             </thead>
             <tbody>
-              {filteredStudents.map((s, idx) => {
+              {sortedFilteredStudents.map((s, idx) => {
                 const isHigh = s.totalScore >= 8.0;
                 const isLow = s.totalScore < 5.0;
                 return (
