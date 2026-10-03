@@ -420,7 +420,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
               <FolderArchive className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
             <h3 className="font-bold text-xs sm:text-base tracking-tight truncate">
-              Xuất Báo Cáo Học Sinh (PNG / ZIP)
+              Tải Phiếu Bài Làm Học Sinh (*.png *.zip)
             </h3>
           </div>
           <button

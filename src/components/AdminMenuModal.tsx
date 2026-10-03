@@ -91,7 +91,7 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
             </span>
           </button>
 
-          {/* Option 2: Xuất báo cáo HS dạng file ảnh */}
+          {/* Option 2: Tải phiếu bài làm học sinh (*.png *.zip) */}
           <button
             onClick={onSelectExportImage}
             className="w-full text-left px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-xl border border-emerald-100 hover:border-emerald-500 bg-emerald-50/40 hover:bg-emerald-50/80 transition-all group flex items-center justify-between gap-2.5 sm:gap-3 cursor-pointer shadow-xs hover:shadow-sm"
@@ -101,7 +101,7 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
                 <FolderArchive className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               <h4 className="text-xs sm:text-base font-bold text-slate-800 group-hover:text-emerald-700 transition-colors truncate">
-                2. Xuất báo cáo học sinh dạng file ảnh (PNG / ZIP)
+                2. Tải phiếu bài làm học sinh (*.png *.zip)
               </h4>
             </div>
             <span className="text-emerald-600 group-hover:translate-x-1 transition-transform flex-shrink-0">
@@ -109,7 +109,7 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
             </span>
           </button>
 
-          {/* Option 3: Xuất kết quả theo lớp dạng file *.xlsx */}
+          {/* Option 3: Xuất kết quả theo lớp (*.xlsx *.png) */}
           <button
             onClick={onSelectExportExcel}
             className="w-full text-left px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-xl border border-teal-100 hover:border-teal-500 bg-teal-50/40 hover:bg-teal-50/80 transition-all group flex items-center justify-between gap-2.5 sm:gap-3 cursor-pointer shadow-xs hover:shadow-sm"
@@ -119,7 +119,7 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
                 <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               <h4 className="text-xs sm:text-base font-bold text-slate-800 group-hover:text-teal-700 transition-colors truncate">
-                3. Xuất kết quả theo lớp dạng file Microsoft Excel (*.xlsx)
+                3. Xuất kết quả theo lớp (*.xlsx *.png)
               </h4>
             </div>
             <span className="text-teal-600 group-hover:translate-x-1 transition-transform flex-shrink-0">
@@ -137,7 +137,7 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
                 <History className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               <h4 className="text-xs sm:text-base font-bold text-slate-800 group-hover:text-sky-700 transition-colors truncate">
-                4. Lịch sử nộp bài (Từ Cơ sở dữ liệu)
+                4. Lịch sử nộp bài
               </h4>
             </div>
             <span className="text-sky-600 group-hover:translate-x-1 transition-transform flex-shrink-0">
