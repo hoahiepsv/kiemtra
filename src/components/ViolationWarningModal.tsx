@@ -169,7 +169,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
 
       const today = new Date();
       const dateTag = `${today.getDate().toString().padStart(2, '0')}_${(today.getMonth() + 1).toString().padStart(2, '0')}_${today.getFullYear()}`;
-      const fileName = `Canh_Bao_Trung_Lap_IP_${dateTag}.png`;
+      const fileName = `Canh_Bao_Vi_Pham_${dateTag}.png`;
 
       const link = document.createElement('a');
       link.download = fileName;
@@ -196,7 +196,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
             </div>
             <div className="flex items-center gap-1.5 flex-wrap min-w-0">
               <h3 className="font-extrabold text-xs sm:text-base tracking-tight truncate">
-                Cảnh Báo Vi Phạm (Trùng Lặp IP)
+                Cảnh Báo Vi Phạm
               </h3>
               <span className="hidden xs:inline-flex text-[9px] sm:text-[10px] font-bold uppercase bg-white/20 text-white px-1.5 py-0.5 rounded-full border border-white/25 flex-shrink-0">
                 Kiểm duyệt
@@ -722,7 +722,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                   HỆ THỐNG KIỂM TRA TRỰC TUYẾN
                 </p>
                 <h1 className="text-xl font-black text-rose-700 uppercase tracking-tight mt-0.5">
-                  BÁO CÁO CẢNH BÁO VI PHẠM: TRÙNG LẶP ĐỊA CHỈ IP
+                  CẢNH BÁO VI PHẠM
                 </h1>
                 <p className="text-xs font-semibold text-slate-600 mt-1">
                   Kiểm duyệt tính trung thực & Phát hiện gian lận thi cử

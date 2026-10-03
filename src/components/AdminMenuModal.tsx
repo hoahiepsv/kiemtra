@@ -156,7 +156,7 @@ export const AdminMenuModal: React.FC<AdminMenuModalProps> = ({
               </div>
               <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                 <h4 className="text-xs sm:text-base font-bold text-slate-800 group-hover:text-rose-700 transition-colors truncate">
-                  5. Cảnh báo vi phạm (Trùng lặp IP)
+                  5. Cảnh báo vi phạm
                 </h4>
                 {violatingIpStats.count > 0 ? (
                   <span className="px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-rose-600 text-white shadow-xs animate-pulse">
