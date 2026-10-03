@@ -229,6 +229,23 @@ function checkSingleEssayMatch(rawStudent: string, rawOption: string): boolean {
   const cCleanNoSpace = cCleanNorm.replace(/\s+/g, '');
   if (sCleanNoSpace && sCleanNoSpace === cCleanNoSpace) return true;
 
+  // 3.1. So khớp biểu thức phép tính / phương trình đổi đơn vị:
+  // Học sinh gõ: "3TB=3072GB", "3TB = 3072 GB", "3TB : 3072GB", "3TB -> 3072GB", "3TB => 3072GB",
+  // "3TB thì sẽ bằng 3072 GB", "3TB bằng 3072GB", "3 * 1024 = 3072", "3x1024=3072"
+  // Tách theo các dấu ngăn cách vế tính toán: =, :, =>, ->, "là", "bằng", "ra", "thì bằng", "thì sẽ bằng"
+  const equationParts = rawStudent
+    .split(/[=:]|=>|->|\b(?:la|là|bang|bằng|ra|thì\s+bằng|thì\s+sẽ\s+bằng|thi\s+bang|thi\s+se\s+bang)\b/i)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (equationParts.length > 1) {
+    for (const part of equationParts) {
+      if (part !== rawStudent && checkSingleEssayMatch(part, rawOption)) {
+        return true;
+      }
+    }
+  }
+
   // 4. So khớp số học thông minh:
   // Phân tách hàng nghìn (1.234 vs 1234 vs 1,234 vs 1 234)
   const sNoNumSeparator = sCleanNoSpace.replace(/[.,]/g, '');
@@ -386,4 +403,93 @@ export function overrideEssayGrade(
       };
     }),
   };
+}
+
+/**
+ * Tự động chấm lại toàn bộ các câu tự luận cho một học sinh dựa trên đáp án chuẩn và thuật toán nhận diện thông minh mới
+ */
+export function autoRegradeSubmission(
+  submission: SubmissionRecord,
+  questions: Question[]
+): { updated: SubmissionRecord; hasChanged: boolean } {
+  if (!questions || questions.length === 0 || !submission.scoreString) {
+    return { updated: submission, hasChanged: false };
+  }
+
+  const parsed = parseScoreStringDetailed(submission.scoreString);
+  let hasChanged = false;
+
+  const newResults = questions.map((q, idx) => {
+    const order = q.orderNumber || idx + 1;
+    const matched = parsed.items.find((it) => it.orderNumber === order);
+    const studentAns = matched?.studentAnswer || '';
+    const oldEarned = matched ? matched.earnedPoints : 0;
+    const fullPoints = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
+
+    let newEarned = oldEarned;
+
+    if (q.type === 'Tự luận' && studentAns && studentAns.trim()) {
+      const isNowCorrect = checkEssayAnswerMatch(studentAns, q.correctAnswer);
+      if (isNowCorrect && oldEarned === 0) {
+        newEarned = fullPoints;
+        hasChanged = true;
+      }
+    }
+
+    return {
+      orderNumber: order,
+      earnedPoints: newEarned,
+      studentAnswer: studentAns,
+    };
+  });
+
+  if (!hasChanged) {
+    return { updated: submission, hasChanged: false };
+  }
+
+  const rawTotal = newResults.reduce((acc, r) => acc + (Number(r.earnedPoints) || 0), 0);
+  const newTotalScore = Math.round(rawTotal * 100) / 100;
+  const newScoreString = buildScoreString(newResults);
+
+  const updated: SubmissionRecord = {
+    ...submission,
+    totalScore: newTotalScore,
+    scoreString: newScoreString,
+    questionResults: newResults.map((r) => {
+      const existingQ = submission.questionResults?.find((q) => q.orderNumber === r.orderNumber);
+      const matchedQ = questions.find((q) => (q.orderNumber || 0) === r.orderNumber);
+      return {
+        questionId: existingQ?.questionId || matchedQ?.id || r.orderNumber,
+        orderNumber: r.orderNumber,
+        studentAnswer: r.studentAnswer,
+        correctAnswer: existingQ?.correctAnswer || matchedQ?.correctAnswer || '',
+        isCorrect: r.earnedPoints > 0,
+        earnedPoints: r.earnedPoints,
+        maxPoints: existingQ?.maxPoints || matchedQ?.points || (r.earnedPoints > 0 ? r.earnedPoints : 1),
+        category: existingQ?.category || matchedQ?.category || 'Chung',
+      };
+    }),
+  };
+
+  return { updated, hasChanged: true };
+}
+
+/**
+ * Tự động chấm lại toàn bộ danh sách bài nộp của tất cả học sinh
+ */
+export function autoRegradeAllSubmissions(
+  submissions: SubmissionRecord[],
+  questions: Question[]
+): { updatedList: SubmissionRecord[]; changeCount: number } {
+  let changeCount = 0;
+  const updatedList = submissions.map((sub) => {
+    const { updated, hasChanged } = autoRegradeSubmission(sub, questions);
+    if (hasChanged) {
+      changeCount++;
+      return updated;
+    }
+    return sub;
+  });
+
+  return { updatedList, changeCount };
 }
