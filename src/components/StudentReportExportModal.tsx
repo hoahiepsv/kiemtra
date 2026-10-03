@@ -179,9 +179,8 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
     }
 
     setStudents(loadedList);
-    // Auto select all by default
-    const allKeys = new Set(loadedList.map((s) => getStudentKey(s)));
-    setSelectedIds(allKeys);
+    // Mặc định không đánh dấu (chọn) học sinh nào theo yêu cầu người dùng
+    setSelectedIds(new Set());
     setIsLoading(false);
   };
 
@@ -202,12 +201,22 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
       !searchKeyword.trim() ||
       matchSearchQuery(s.studentName, searchKeyword) ||
       matchSearchQuery(s.className, searchKeyword);
-    const matchClass = selectedClass === 'all' || String(s.className || '').trim() === selectedClass;
+    const sClass = String(s.className || '').trim().toUpperCase();
+    const matchClass =
+      selectedClass === 'all' ||
+      selectedClass === 'ALL' ||
+      sClass === selectedClass.toUpperCase();
     return matchSearch && matchClass;
   });
 
-  // Unique classes for filter
-  const classOptions = Array.from(new Set(students.map((s) => String(s.className || '').trim()))).filter(Boolean);
+  // Unique classes for filter (được chuẩn hóa chữ in hoa & sắp xếp)
+  const classOptions = useMemo(() => {
+    return Array.from(
+      new Set(students.map((s) => String(s.className || '').trim().toUpperCase()))
+    )
+      .filter(Boolean)
+      .sort();
+  }, [students]);
 
   // Vị trí học sinh xem trước để chuyển tới lui
   const previewIndex = useMemo(() => {
@@ -444,7 +453,7 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
                 onChange={(e) => setSelectedClass(e.target.value)}
                 className="w-full appearance-none pl-2.5 pr-7 py-1 sm:py-1.5 text-xs bg-white border border-slate-200 rounded-lg sm:rounded-xl focus:outline-hidden focus:ring-1 focus:ring-emerald-500 font-medium cursor-pointer"
               >
-                <option value="ALL">Tất cả lớp ({classOptions.length})</option>
+                <option value="all">Tất cả lớp ({classOptions.length})</option>
                 {classOptions.map((cls) => {
                   const count = students.filter(
                     (s) => (s.className || "").trim().toUpperCase() === cls

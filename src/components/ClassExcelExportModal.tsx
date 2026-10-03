@@ -432,16 +432,19 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
         {/* TOOLBAR & BỘ LỌC */}
         <div className="px-3 py-2 sm:px-6 sm:py-2.5 bg-slate-50 border-b border-slate-200 flex-shrink-0 space-y-2">
           
-          {/* Row 1: Chọn lớp (Mobile dạng dropdown có mũi tên sổ xuống, Desktop dạng pills) */}
+          {/* Row 1: Chọn lớp (Dạng mũi tên sổ xuống cho gọn gàng trên mọi thiết bị) */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             
-            {/* GIAO DIỆN MOBILE: Lọc theo lớp dạng mũi tên sổ xuống cho gọn gàng */}
-            <div className="sm:hidden w-full">
-              <div className="relative">
+            {/* Lọc theo lớp dạng mũi tên sổ xuống cho gọn gàng */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <span className="text-xs font-bold text-slate-700 whitespace-nowrap">
+                Lọc theo lớp:
+              </span>
+              <div className="relative w-full sm:w-72">
                 <select
                   value={selectedClass}
                   onChange={(e) => setSelectedClass(e.target.value)}
-                  className="w-full appearance-none pl-3.5 pr-10 py-2 bg-white border-2 border-emerald-500/50 rounded-xl text-xs font-bold text-slate-800 shadow-xs focus:outline-hidden focus:ring-2 focus:ring-emerald-500 focus:border-emerald-600 cursor-pointer"
+                  className="w-full appearance-none pl-3.5 pr-10 py-1.5 sm:py-2 bg-white border-2 border-emerald-500/50 rounded-xl text-xs font-bold text-slate-800 shadow-xs focus:outline-hidden focus:ring-2 focus:ring-emerald-500 focus:border-emerald-600 cursor-pointer"
                 >
                   <option value="all">📁 Tất cả các lớp ({students.length} học sinh)</option>
                   {classList.map((cls) => {
@@ -459,41 +462,6 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
                   <ChevronDown className="w-4 h-4 stroke-[2.5]" />
                 </div>
               </div>
-            </div>
-
-            {/* GIAO DIỆN DESKTOP: Các tab chọn lớp nhanh */}
-            <div className="hidden sm:flex items-center gap-1.5 flex-wrap">
-              <span className="text-[11px] font-bold text-slate-500 uppercase">Lớp:</span>
-              <button
-                type="button"
-                onClick={() => setSelectedClass('all')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  selectedClass === 'all'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                Tất cả ({students.length})
-              </button>
-              {classList.map((cls) => {
-                const count = students.filter(
-                  (s) => (s.className || '').trim().toUpperCase() === cls
-                ).length;
-                return (
-                  <button
-                    key={cls}
-                    type="button"
-                    onClick={() => setSelectedClass(cls)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      selectedClass === cls
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                    }`}
-                  >
-                    Lớp {cls} ({count})
-                  </button>
-                );
-              })}
             </div>
 
             {/* Ô tìm kiếm & Nút làm mới */}
