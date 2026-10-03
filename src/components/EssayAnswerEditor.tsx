@@ -162,7 +162,7 @@ export const EssayAnswerEditor: React.FC<EssayAnswerEditorProps> = ({
           {previewData1String ? previewData1String : <span className="text-slate-400 font-normal italic">Chưa nhập đáp án</span>}
         </div>
         <p className="text-[10px] text-indigo-800 leading-normal pt-0.5">
-          ✨ <strong>Quy tắc chấm:</strong> Học sinh gõ <strong>bất kỳ 1 trong các đáp án</strong> trên đều được tính điểm tối đa. Hệ thống tự động không phân biệt chữ hoa/thường, khoảng trắng thừa hay dấu tiếng Việt.
+          ✨ <strong>Nhận diện tự luận thông minh:</strong> Học sinh gõ <strong>bất kỳ 1 trong các đáp án</strong> trên đều được tính điểm. Hệ thống tự động nhận diện và bỏ qua các tiền tố/hậu tố học sinh thường gõ thêm (như <em>"đáp số 1234 thưa thầy"</em>, <em>"bằng 1.234 ạ"</em>, <em>"1,234"</em>, <em>"theo em là..."</em>), tự chuẩn hóa dấu phân tách hàng nghìn và không phân biệt chữ hoa/thường, dấu tiếng Việt.
         </p>
       </div>
     </div>
