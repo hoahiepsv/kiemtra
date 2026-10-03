@@ -110,8 +110,18 @@ export function parseSubmissionDateTime(dateStr?: string): number {
 
 /**
  * Thuật toán so sánh thứ tự bài nộp: MỚI NHẤT đứng trước, CŨ NHẤT đứng sau
+ * Ưu tiên STT từ Google Sheet (dòng nộp sau có STT lớn hơn) để tránh sai lệch khi đồng hồ thiết bị của HS chạy sai
  */
 export function compareSubmissionsNewestFirst(a: SubmissionRecord, b: SubmissionRecord): number {
+  // 1. Căn cứ chuẩn xác nhất: Số thứ tự (STT) tự tăng trên Google Sheet data2
+  // Dòng ghi sau luôn có STT lớn hơn -> nộp sau -> đưa lên đầu bảng
+  const sttA = Number(a.stt) || 0;
+  const sttB = Number(b.stt) || 0;
+  if (sttA > 0 && sttB > 0 && sttA !== sttB) {
+    return sttB - sttA;
+  }
+
+  // 2. Nếu không có STT hoặc STT bằng nhau thì so sánh theo thời gian
   const tsA = a.timestamp || 0;
   const tsB = b.timestamp || 0;
   const endA = parseSubmissionDateTime(a.endTime);
@@ -126,9 +136,6 @@ export function compareSubmissionsNewestFirst(a: SubmissionRecord, b: Submission
     return bestTimeB - bestTimeA; // Mới nhất lên trước
   }
 
-  // Nếu không có thời gian thì căn cứ theo STT (dòng ghi sau trên Google Sheet có STT lớn hơn -> nộp sau)
-  const sttA = Number(a.stt) || 0;
-  const sttB = Number(b.stt) || 0;
   return sttB - sttA;
 }
 
