@@ -30,6 +30,7 @@ import {
   deleteSubmissionFromHistory,
   updateSubmissionInHistory,
   sendSubmissionToData2,
+  compareSubmissionsNewestFirst,
 } from '../utils/syncService';
 import { matchSearchQuery, overrideEssayGrade, autoRegradeAllSubmissions } from '../utils/gradeService';
 import { StudentReportCard } from './StudentReportCard';
@@ -177,6 +178,9 @@ export const StudentReportExportModal: React.FC<StudentReportExportModalProps> =
       const { updatedList } = autoRegradeAllSubmissions(loadedList, questions);
       loadedList = updatedList;
     }
+
+    // Sắp xếp bài nộp mới nhất lên đầu theo STT Google Sheet
+    loadedList.sort(compareSubmissionsNewestFirst);
 
     setStudents(loadedList);
     // Mặc định không đánh dấu (chọn) học sinh nào theo yêu cầu người dùng

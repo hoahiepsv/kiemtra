@@ -19,7 +19,11 @@ import {
 import * as XLSX from 'xlsx';
 import { toPng } from 'html-to-image';
 import { SubmissionRecord, ExamConfig, Question } from '../types';
-import { fetchSubmissionsFromData2, getSubmissionHistory } from '../utils/syncService';
+import {
+  fetchSubmissionsFromData2,
+  getSubmissionHistory,
+  compareSubmissionsNewestFirst,
+} from '../utils/syncService';
 import { formatExamDateTime, formatExamDuration } from '../utils/dateUtils';
 import { matchSearchQuery, autoRegradeAllSubmissions } from '../utils/gradeService';
 
@@ -60,8 +64,8 @@ export const ClassExcelExportModal: React.FC<ClassExcelExportModalProps> = ({
         finalResult = localHistory.length > 0 ? localHistory : [];
       }
 
-      // Sắp xếp mới nhất lên đầu
-      finalResult.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      // Sắp xếp mới nhất lên đầu (chuẩn theo STT bảng tính Google Sheet)
+      finalResult.sort(compareSubmissionsNewestFirst);
 
       // Tự động nhận diện và tính lại điểm cho các câu tự luận có đáp án tương đương (3TB=3072GB, 3072GB, 1.234...)
       if (questions && questions.length > 0 && finalResult.length > 0) {
