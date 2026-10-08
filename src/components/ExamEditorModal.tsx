@@ -55,6 +55,10 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
   const [subject, setSubject] = useState(config.subject || '');
   const [durationMinutes, setDurationMinutes] = useState<number>(config.durationMinutes || 15);
   const [data1Url, setData1Url] = useState(config.data1Url || '');
+  const [shuffleQuestions, setShuffleQuestions] = useState<boolean>(config.shuffleQuestions !== false);
+  const [shuffleOptions, setShuffleOptions] = useState<boolean>(config.shuffleOptions !== false);
+  const [enableIpBlocking, setEnableIpBlocking] = useState<boolean>(config.enableIpBlocking ?? true);
+  const [blockedIpsList, setBlockedIpsList] = useState<string[]>(config.blockedIps || []);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatusMsg, setSaveStatusMsg] = useState<string | null>(null);
 
@@ -94,6 +98,10 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
       setSubject(config.subject || '');
       setDurationMinutes(config.durationMinutes || 15);
       setData1Url(config.data1Url || '');
+      setShuffleQuestions(config.shuffleQuestions !== false);
+      setShuffleOptions(config.shuffleOptions !== false);
+      setEnableIpBlocking(config.enableIpBlocking ?? true);
+      setBlockedIpsList(config.blockedIps || []);
 
       // Deep clone questions
       const cloned = initialQuestions.map((q, idx) => ({
@@ -117,12 +125,14 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
   // Breakdown of question types
   const typeCounts = useMemo(() => {
     let mcCount = 0;
+    let tfCount = 0;
     let essayCount = 0;
     questionList.forEach((q) => {
       if (q.type === 'Trắc nghiệm 1 đáp án') mcCount++;
+      else if (q.type === 'Đúng / Sai') tfCount++;
       else essayCount++;
     });
-    return { mcCount, essayCount, total: questionList.length };
+    return { mcCount, tfCount, essayCount, total: questionList.length };
   }, [questionList]);
 
   if (!isOpen) return null;
@@ -139,30 +149,44 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
     const order = questionList.length + 1;
     const defaultPoints = 0.25; // Bước điểm chuẩn 0.25đ
 
-    const newQuestion: Question =
-      type === 'Trắc nghiệm 1 đáp án'
-        ? {
-            id: newId,
-            orderNumber: order,
-            type: 'Trắc nghiệm 1 đáp án',
-            content: '',
-            optionA: '',
-            optionB: '',
-            optionC: '',
-            optionD: '',
-            correctAnswer: 'A',
-            points: defaultPoints,
-            category: 'Nhận biết',
-          }
-        : {
-            id: newId,
-            orderNumber: order,
-            type: 'Tự luận',
-            content: '',
-            correctAnswer: '',
-            points: defaultPoints,
-            category: 'Vận dụng',
-          };
+    let newQuestion: Question;
+    if (type === 'Trắc nghiệm 1 đáp án') {
+      newQuestion = {
+        id: newId,
+        orderNumber: order,
+        type: 'Trắc nghiệm 1 đáp án',
+        content: '',
+        optionA: '',
+        optionB: '',
+        optionC: '',
+        optionD: '',
+        correctAnswer: 'A',
+        points: defaultPoints,
+        category: 'Nhận biết',
+      };
+    } else if (type === 'Đúng / Sai') {
+      newQuestion = {
+        id: newId,
+        orderNumber: order,
+        type: 'Đúng / Sai',
+        content: '',
+        optionA: 'Đúng',
+        optionB: 'Sai',
+        correctAnswer: 'A',
+        points: defaultPoints,
+        category: 'Thông hiểu',
+      };
+    } else {
+      newQuestion = {
+        id: newId,
+        orderNumber: order,
+        type: 'Tự luận',
+        content: '',
+        correctAnswer: '',
+        points: defaultPoints,
+        category: 'Vận dụng',
+      };
+    }
 
     setQuestionList((prev) => [...prev, newQuestion]);
 
@@ -284,6 +308,12 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
           setValidationError(`Câu số ${i + 1} chưa chọn đáp án đúng (A, B, C hoặc D).`);
           return;
         }
+      } else if (q.type === 'Đúng / Sai') {
+        const ca = q.correctAnswer.trim().toUpperCase();
+        if (!['A', 'B', 'ĐÚNG', 'SAI', 'TRUE', 'FALSE'].includes(ca)) {
+          setValidationError(`Câu số ${i + 1} (Đúng / Sai) chưa chọn đáp án Đúng hoặc Sai.`);
+          return;
+        }
       } else {
         if (!q.correctAnswer || !q.correctAnswer.trim()) {
           setValidationError(`Câu số ${i + 1} (Tự luận) chưa nhập đáp án đúng/từ khóa.`);
@@ -303,15 +333,23 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
       subject: subject.trim(),
       durationMinutes: Number(durationMinutes),
       data1Url: normalizeAppsScriptUrl(data1Url),
+      shuffleQuestions,
+      shuffleOptions,
+      enableIpBlocking,
+      blockedIps: blockedIpsList,
     };
 
-    // Normalize orderNumbers and essay answer format (đáp án 1 / đáp án 2 / ...)
+    // Normalize orderNumbers and answer format
     const normalizedQuestions = questionList.map((q, idx) => ({
       ...q,
       orderNumber: idx + 1,
+      optionA: q.type === 'Đúng / Sai' ? (q.optionA?.trim() || 'Đúng') : q.optionA,
+      optionB: q.type === 'Đúng / Sai' ? (q.optionB?.trim() || 'Sai') : q.optionB,
       correctAnswer:
         q.type === 'Trắc nghiệm 1 đáp án'
           ? q.correctAnswer.trim().toUpperCase()
+          : q.type === 'Đúng / Sai'
+          ? (['A', 'ĐÚNG', 'TRUE'].includes(q.correctAnswer.trim().toUpperCase()) ? 'A' : 'B')
           : joinAcceptableAnswers(parseAcceptableAnswers(q.correctAnswer)),
     }));
 
@@ -399,7 +437,11 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
             )}
 
             <div className="text-xs text-slate-300 hidden md:block">
-              (Gồm: <strong className="text-white">{typeCounts.total} câu</strong> — {typeCounts.mcCount} trắc nghiệm, {typeCounts.essayCount} tự luận)
+              (Gồm: <strong className="text-white">{typeCounts.total} câu</strong> — {[
+                typeCounts.mcCount > 0 ? `${typeCounts.mcCount} TN 4 lựa chọn` : null,
+                typeCounts.tfCount > 0 ? `${typeCounts.tfCount} Đúng/Sai` : null,
+                typeCounts.essayCount > 0 ? `${typeCounts.essayCount} tự luận` : null,
+              ].filter(Boolean).join(', ') || 'Chưa có câu hỏi'})
             </div>
           </div>
 
@@ -529,6 +571,47 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Tùy chọn xáo trộn đề & đáp án ngẫu nhiên - 2 dòng siêu gọn gàng */}
+                <div className="col-span-1 sm:col-span-2 lg:col-span-4 pt-2 border-t border-slate-100">
+                  <div className="bg-indigo-50/50 p-2 sm:px-3 sm:py-1.5 rounded-xl border border-indigo-100 space-y-1">
+                    {/* Dòng 1: Xáo trộn câu hỏi */}
+                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
+                      <input
+                        type="checkbox"
+                        checked={shuffleQuestions}
+                        onChange={(e) => setShuffleQuestions(e.target.checked)}
+                        className="w-4 h-4 rounded-xs text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer flex-shrink-0"
+                      />
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-slate-800">
+                          Chỉ hoán vị các câu hỏi trắc nghiệm
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          (Các câu trắc nghiệm được xáo trộn với nhau; câu tự luận giữ nguyên vị trí cố định)
+                        </span>
+                      </div>
+                    </label>
+
+                    {/* Dòng 2: Xáo trộn đáp án */}
+                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
+                      <input
+                        type="checkbox"
+                        checked={shuffleOptions}
+                        onChange={(e) => setShuffleOptions(e.target.checked)}
+                        className="w-4 h-4 rounded-xs text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer flex-shrink-0"
+                      />
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-slate-800">
+                          Hoán đổi ngẫu nhiên đáp án (A, B, C, D)
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          (Vị trí các lựa chọn trắc nghiệm được đảo ngẫu nhiên)
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -584,30 +667,39 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                         {/* Question Type selector */}
                         <select
                           value={q.type}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const nextType = e.target.value as QuestionType;
+                            let extraProps: Partial<Question> = {};
+                            if (nextType === 'Trắc nghiệm 1 đáp án') {
+                              extraProps = {
+                                optionA: q.optionA || '',
+                                optionB: q.optionB || '',
+                                optionC: q.optionC || '',
+                                optionD: q.optionD || '',
+                                correctAnswer: ['A', 'B', 'C', 'D'].includes(q.correctAnswer) ? q.correctAnswer : 'A',
+                              };
+                            } else if (nextType === 'Đúng / Sai') {
+                              extraProps = {
+                                optionA: 'Đúng',
+                                optionB: 'Sai',
+                                optionC: '',
+                                optionD: '',
+                                correctAnswer: ['A', 'B'].includes(q.correctAnswer) ? q.correctAnswer : 'A',
+                              };
+                            } else {
+                              extraProps = {
+                                correctAnswer: ['A', 'B', 'C', 'D'].includes(q.correctAnswer) ? '' : (q.correctAnswer || ''),
+                              };
+                            }
                             handleUpdateQuestion(q.id, {
-                              type: e.target.value as QuestionType,
-                              // If switching to MC, default options
-                              ...(e.target.value === 'Trắc nghiệm 1 đáp án'
-                                ? {
-                                    optionA: q.optionA || '',
-                                    optionB: q.optionB || '',
-                                    optionC: q.optionC || '',
-                                    optionD: q.optionD || '',
-                                    correctAnswer: ['A', 'B', 'C', 'D'].includes(q.correctAnswer)
-                                      ? q.correctAnswer
-                                      : 'A',
-                                  }
-                                : {
-                                    correctAnswer: ['A', 'B', 'C', 'D'].includes(q.correctAnswer)
-                                      ? ''
-                                      : (q.correctAnswer || ''),
-                                  }),
-                            })
-                          }
+                              type: nextType,
+                              ...extraProps,
+                            });
+                          }}
                           className="px-2.5 py-1 rounded-xl border border-slate-300 bg-slate-50 text-slate-800 text-xs font-bold cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-sky-500"
                         >
                           <option value="Trắc nghiệm 1 đáp án">Trắc nghiệm 1 đáp án (A, B, C, D)</option>
+                          <option value="Đúng / Sai">Trắc nghiệm Đúng / Sai</option>
                           <option value="Tự luận">Tự luận / Điền số & từ khóa</option>
                         </select>
 
@@ -747,8 +839,8 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                       />
                     </div>
 
-                    {/* MC Options or Essay Input */}
-                    {isMC ? (
+                    {/* MC Options, True/False, or Essay Input */}
+                    {q.type === 'Trắc nghiệm 1 đáp án' ? (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-xs">
                           <label className="font-bold text-slate-700">
@@ -808,6 +900,74 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                           })}
                         </div>
                       </div>
+                    ) : q.type === 'Đúng / Sai' ? (
+                      /* True / False Editor */
+                      <div className="space-y-2.5 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                        <div className="flex items-center justify-between text-xs">
+                          <label className="font-bold text-slate-700">
+                            Thiết lập đáp án Đúng hoặc Sai (Bấm chọn đáp án chuẩn của câu hỏi):
+                          </label>
+                          <span className="text-[11px] font-bold text-emerald-700">
+                            Đáp án đúng: {q.correctAnswer === 'B' || q.correctAnswer === 'Sai' ? 'SAI' : 'ĐÚNG'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          {/* Option Đúng */}
+                          <div
+                            onClick={() => handleUpdateQuestion(q.id, { correctAnswer: 'A', optionA: q.optionA || 'Đúng', optionB: q.optionB || 'Sai' })}
+                            className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                              q.correctAnswer === 'A' || q.correctAnswer === 'Đúng' || q.correctAnswer === 'True'
+                                ? 'border-emerald-500 bg-emerald-50/70 ring-1 ring-emerald-500'
+                                : 'border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/20'
+                            }`}
+                          >
+                            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                              <input
+                                type="radio"
+                                name={`tf_correct_${q.id}`}
+                                checked={q.correctAnswer === 'A' || q.correctAnswer === 'Đúng' || q.correctAnswer === 'True'}
+                                onChange={() => handleUpdateQuestion(q.id, { correctAnswer: 'A', optionA: q.optionA || 'Đúng', optionB: q.optionB || 'Sai' })}
+                                className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              />
+                              <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center">
+                                ✓
+                              </span>
+                              <span className="text-sm font-black text-emerald-950">ĐÚNG</span>
+                            </label>
+                            <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                              Khẳng định đúng
+                            </span>
+                          </div>
+
+                          {/* Option Sai */}
+                          <div
+                            onClick={() => handleUpdateQuestion(q.id, { correctAnswer: 'B', optionA: q.optionA || 'Đúng', optionB: q.optionB || 'Sai' })}
+                            className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                              q.correctAnswer === 'B' || q.correctAnswer === 'Sai' || q.correctAnswer === 'False'
+                                ? 'border-rose-500 bg-rose-50/70 ring-1 ring-rose-500'
+                                : 'border-slate-200 bg-white hover:border-rose-300 hover:bg-rose-50/20'
+                            }`}
+                          >
+                            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                              <input
+                                type="radio"
+                                name={`tf_correct_${q.id}`}
+                                checked={q.correctAnswer === 'B' || q.correctAnswer === 'Sai' || q.correctAnswer === 'False'}
+                                onChange={() => handleUpdateQuestion(q.id, { correctAnswer: 'B', optionA: q.optionA || 'Đúng', optionB: q.optionB || 'Sai' })}
+                                className="w-4 h-4 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                              />
+                              <span className="w-6 h-6 rounded-lg bg-rose-600 text-white font-bold text-xs flex items-center justify-center">
+                                ✕
+                              </span>
+                              <span className="text-sm font-black text-rose-950">SAI</span>
+                            </label>
+                            <span className="text-[11px] text-rose-700 font-semibold bg-rose-100/70 px-2 py-0.5 rounded-md">
+                              Khẳng định sai
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     ) : (
                       /* Essay Correct Answer Input with synonyms / alternate answers */
                       <EssayAnswerEditor
@@ -837,10 +997,10 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
               })}
             </div>
 
-            {/* 2 Nút thêm câu hỏi chuyển xuống dưới cùng theo yêu cầu */}
+            {/* Các Nút thêm câu hỏi chuyển xuống dưới cùng theo yêu cầu */}
             <div
               ref={questionListEndRef}
-              className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-sky-50 via-indigo-50/40 to-slate-50 border-2 border-dashed border-sky-300 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4"
+              className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-sky-50 via-teal-50/30 to-indigo-50/30 border-2 border-dashed border-sky-300 shadow-2xs flex flex-col lg:flex-row items-center justify-between gap-4"
             >
               <div>
                 <h5 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
@@ -848,27 +1008,36 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                   <span>Thêm câu hỏi mới vào cuối đề thi</span>
                 </h5>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Bước điểm quy chuẩn là <strong className="text-amber-800">0,25đ</strong>. Bấm nút bên dưới để thêm câu hỏi vào cuối đề:
+                  Bước điểm quy chuẩn là <strong className="text-amber-800">0,25đ</strong>. Bấm nút bên dưới để thêm câu hỏi phù hợp:
                 </p>
               </div>
 
-              <div className="flex items-center gap-2.5 flex-wrap justify-center w-full sm:w-auto">
+              <div className="flex items-center gap-2 flex-wrap justify-center w-full lg:w-auto">
                 <button
                   type="button"
                   onClick={() => handleAddQuestion('Trắc nghiệm 1 đáp án')}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs sm:text-sm font-bold transition-all shadow-md shadow-sky-600/20 cursor-pointer active:scale-95"
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs sm:text-sm font-bold transition-all shadow-md shadow-sky-600/20 cursor-pointer active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>+ Thêm Trắc Nghiệm (4 lựa chọn)</span>
+                  <span>+ TN (4 lựa chọn)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleAddQuestion('Đúng / Sai')}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-bold transition-all shadow-md shadow-teal-600/20 cursor-pointer active:scale-95"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>+ Trắc nghiệm Đúng / Sai</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleAddQuestion('Tự luận')}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold transition-all shadow-md shadow-indigo-600/20 cursor-pointer active:scale-95"
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold transition-all shadow-md shadow-indigo-600/20 cursor-pointer active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>+ Thêm Tự Luận / Điền Số</span>
+                  <span>+ Tự Luận / Điền Số</span>
                 </button>
               </div>
             </div>

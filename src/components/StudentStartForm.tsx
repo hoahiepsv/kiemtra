@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Play, Clock, BookOpen, School, AlertCircle, Sparkles, RotateCcw, CheckCircle2, Globe } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Play, Clock, BookOpen, School, AlertCircle, Sparkles, RotateCcw, CheckCircle2, Globe, ShieldAlert } from 'lucide-react';
 import { ExamConfig, DraftExam, Question } from '../types';
 import { fetchClientIp } from '../utils/ipService';
 import { formatStudentName, formatClassName } from '../utils/studentFormatting';
+import { isIpBlockedCheck } from '../utils/ipViolationService';
 
 interface StudentStartFormProps {
   config: ExamConfig;
@@ -35,6 +36,9 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
       : questions
       ? questions.filter((q) => q.type === 'Trắc nghiệm 1 đáp án').length
       : 0;
+  const calculatedTfCount = questions
+    ? questions.filter((q) => q.type === 'Đúng / Sai').length
+    : 0;
   const calculatedEssayCount =
     essayCount !== undefined
       ? essayCount
@@ -46,6 +50,11 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [clientIp, setClientIp] = useState<string>('');
   const [isLoadingIp, setIsLoadingIp] = useState<boolean>(true);
+
+  // Tra soát tức thời trong RAM (< 0.0001s) xem IP thiết bị này có bị Giáo viên chặn hay không
+  const isDeviceBlocked = useMemo(() => {
+    return isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true);
+  }, [clientIp, config.blockedIps, config.enableIpBlocking]);
 
   useEffect(() => {
     let isMounted = true;
@@ -62,6 +71,15 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Chặn ngay lập tức nếu thiết bị nằm trong danh sách đen
+    if (isDeviceBlocked) {
+      setErrorMessage(
+        `⛔ Thiết bị của bạn (IP: ${clientIp} - Block) đã bị Giáo viên khóa thủ công. Vui lòng liên hệ Giáo viên bộ môn để được mở khóa!`
+      );
+      return;
+    }
+
     const cleanName = formatStudentName(studentName);
     const cleanClass = formatClassName(className);
 
@@ -85,6 +103,32 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
+      {/* Cảnh báo thiết bị / IP bị khóa do vi phạm quy chế */}
+      {isDeviceBlocked && (
+        <div className="mb-6 p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 shadow-md flex items-start gap-3.5 animate-in fade-in">
+          <div className="p-2.5 rounded-xl bg-rose-600 text-white flex-shrink-0 shadow-sm">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-sm font-black text-rose-950 uppercase tracking-tight">
+                Thiết bị bị tạm khóa kiểm tra
+              </h4>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-rose-200 text-rose-900 border border-rose-400 font-mono shadow-2xs">
+                {clientIp || 'IP'} - Block
+              </span>
+            </div>
+            <p className="text-xs text-rose-800 mt-1.5 leading-relaxed font-medium">
+              Địa chỉ IP mạng của thiết bị này đã được Giáo viên đưa vào danh sách chặn thủ công. Bạn <strong>không thể vào phòng thi</strong>.
+            </p>
+            <div className="mt-2.5 text-xs font-bold text-rose-900 bg-white/90 p-2.5 rounded-xl border border-rose-200 shadow-2xs flex items-center gap-1.5">
+              <span>👉</span>
+              <span>Vui lòng liên hệ trực tiếp với <strong>Giáo viên bộ môn</strong> để được kiểm tra và mở khóa làm bài!</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Draft Recovery Alert */}
       {existingDraft && (
         <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -111,8 +155,9 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
             </button>
             <button
               onClick={onResumeDraft}
+              disabled={isDeviceBlocked}
               type="button"
-              className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors shadow-xs cursor-pointer"
+              className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs cursor-pointer"
             >
               Làm tiếp ngay
             </button>
@@ -164,7 +209,11 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
             <div className="min-w-0">
               <span className="text-slate-400 block text-[10px]">Cấu trúc:</span>
               <strong className="text-slate-800 text-xs truncate block">
-                {calculatedMcCount} Trắc nghiệm + {calculatedEssayCount} Tự luận
+                {[
+                  calculatedMcCount > 0 ? `${calculatedMcCount} TN 4 lựa chọn` : null,
+                  calculatedTfCount > 0 ? `${calculatedTfCount} Đúng/Sai` : null,
+                  calculatedEssayCount > 0 ? `${calculatedEssayCount} Tự luận` : null,
+                ].filter(Boolean).join(' + ') || `${questions?.length || 0} câu`}
               </strong>
             </div>
           </div>
@@ -258,10 +307,24 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
           <button
             id="btn-start-exam"
             type="submit"
-            className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-md shadow-sky-500/25 active:scale-[0.99] transition-all cursor-pointer"
+            disabled={isDeviceBlocked}
+            className={`w-full py-3.5 px-6 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-md active:scale-[0.99] transition-all cursor-pointer ${
+              isDeviceBlocked
+                ? 'bg-rose-700 hover:bg-rose-800 text-white opacity-95 cursor-not-allowed shadow-rose-700/25'
+                : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-500/25'
+            }`}
           >
-            <Play className="w-5 h-5 fill-white" />
-            <span>BẮT ĐẦU LÀM BÀI</span>
+            {isDeviceBlocked ? (
+              <>
+                <ShieldAlert className="w-5 h-5" />
+                <span>THIẾT BỊ BỊ TẠM KHÓA (- BLOCK)</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-5 h-5 fill-white" />
+                <span>BẮT ĐẦU LÀM BÀI</span>
+              </>
+            )}
           </button>
         </form>
 

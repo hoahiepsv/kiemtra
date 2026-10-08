@@ -20,11 +20,27 @@ import {
   TrendingUp,
   Loader2,
   Image as ImageIcon,
+  Plus,
+  Trash2,
+  Lock,
+  Unlock,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toPng } from 'html-to-image';
-import { SubmissionRecord } from '../types';
-import { detectIpViolations, IpViolationGroup } from '../utils/ipViolationService';
+import { SubmissionRecord, ExamConfig } from '../types';
+import {
+  detectIpViolations,
+  IpViolationGroup,
+  extractCleanIp,
+  formatBlockedIpString,
+  isIpBlockedCheck,
+  addIpToBlockedList,
+  removeIpFromBlockedList,
+  isValidIpFormat,
+} from '../utils/ipViolationService';
 
 interface ViolationWarningModalProps {
   isOpen: boolean;
@@ -33,6 +49,8 @@ interface ViolationWarningModalProps {
   onSelectSubmission?: (submission: SubmissionRecord) => void;
   onRefreshFromSheet?: () => Promise<void>;
   isSyncing?: boolean;
+  config?: ExamConfig;
+  onUpdateConfig?: (updatedConfig: Partial<ExamConfig>) => void;
 }
 
 export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
@@ -42,10 +60,123 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
   onSelectSubmission,
   onRefreshFromSheet,
   isSyncing = false,
+  config,
+  onUpdateConfig,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'same_student' | 'shared_ip'>('all');
   const [copiedIp, setCopiedIp] = useState<string | null>(null);
+
+  // Trạng thái nhập thủ công IP cần chặn
+  const [manualIpInput, setManualIpInput] = useState('');
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isBlockedListExpanded, setIsBlockedListExpanded] = useState(false);
+
+  const blockedIpsList = config?.blockedIps || [];
+  const isGlobalBlockingEnabled = config?.enableIpBlocking ?? true;
+
+  // Tự động tắt thông báo sau 4 giây
+  useEffect(() => {
+    if (actionMessage) {
+      const timer = setTimeout(() => setActionMessage(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [actionMessage]);
+
+  // Bật/Tắt chặn một địa chỉ IP cụ thể (gắn hậu tố "- Block")
+  const handleToggleBlockIp = (rawIp: string) => {
+    if (!config || !onUpdateConfig) return;
+    const clean = extractCleanIp(rawIp);
+    if (!clean) return;
+
+    const isCurrentlyBlocked = isIpBlockedCheck(clean, blockedIpsList, true);
+    let nextBlocked: string[] = [];
+
+    if (isCurrentlyBlocked) {
+      // Mở chặn: loại bỏ IP này khỏi danh sách
+      nextBlocked = blockedIpsList.filter((b) => extractCleanIp(b) !== clean);
+      setActionMessage({ type: 'success', text: `Đã mở chặn cho IP: ${clean}` });
+    } else {
+      // Chặn: thêm IP kèm hậu tố "- Block"
+      const blockedString = formatBlockedIpString(clean);
+      nextBlocked = [...blockedIpsList, blockedString];
+      setActionMessage({ type: 'success', text: `Đã chặn thành công IP: ${blockedString}` });
+    }
+
+    onUpdateConfig({
+      ...config,
+      blockedIps: nextBlocked,
+    });
+  };
+
+  // Thêm thủ công IP vào danh sách chặn
+  const handleManualAddIp = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!config || !onUpdateConfig) {
+      setActionMessage({ type: 'error', text: 'Chưa thể cập nhật cấu hình. Vui lòng thử lại!' });
+      return;
+    }
+    const trimmed = manualIpInput.trim();
+    if (!trimmed) {
+      setActionMessage({ type: 'error', text: 'Vui lòng nhập địa chỉ IP cần chặn!' });
+      return;
+    }
+
+    const result = addIpToBlockedList(trimmed, blockedIpsList);
+    if (!result.success) {
+      setActionMessage({ type: 'error', text: result.message });
+      return;
+    }
+
+    onUpdateConfig({
+      ...config,
+      blockedIps: result.list,
+    });
+    setManualIpInput('');
+    setActionMessage({ type: 'success', text: result.message });
+    setIsBlockedListExpanded(true);
+  };
+
+  // Mở chặn một IP khỏi danh sách chặn
+  const handleRemoveBlockedIp = (ipToRemove: string) => {
+    if (!config || !onUpdateConfig) return;
+    const nextList = removeIpFromBlockedList(ipToRemove, blockedIpsList);
+    onUpdateConfig({
+      ...config,
+      blockedIps: nextList,
+    });
+    const clean = extractCleanIp(ipToRemove);
+    setActionMessage({ type: 'success', text: `Đã mở chặn cho IP: ${clean}` });
+  };
+
+  // Gỡ chặn toàn bộ danh sách IP
+  const handleClearAllBlockedIps = () => {
+    if (!config || !onUpdateConfig) return;
+    if (blockedIpsList.length === 0) return;
+    if (window.confirm(`Bạn có chắc chắn muốn GỠ CHẶN toàn bộ ${blockedIpsList.length} địa chỉ IP trong danh sách không?`)) {
+      onUpdateConfig({
+        ...config,
+        blockedIps: [],
+      });
+      setActionMessage({ type: 'success', text: 'Đã gỡ chặn toàn bộ danh sách IP!' });
+    }
+  };
+
+  // Nút gạt Bật/Tắt toàn bộ chế độ chặn IP vi phạm
+  const handleToggleGlobalBlocking = () => {
+    if (!config || !onUpdateConfig) return;
+    const nextState = !isGlobalBlockingEnabled;
+    onUpdateConfig({
+      ...config,
+      enableIpBlocking: nextState,
+    });
+    setActionMessage({
+      type: 'success',
+      text: nextState
+        ? 'ĐÃ BẬT chế độ chặn IP vi phạm (- Block)'
+        : 'ĐÃ TẮT chế độ chặn IP (tất cả thiết bị đều có thể vào thi)',
+    });
+  };
 
   // Tự động đồng bộ từ datasheet 2 khi mở modal nếu chưa có đủ dữ liệu
   useEffect(() => {
@@ -108,10 +239,15 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
     let stt = 1;
 
     violationGroups.forEach((g) => {
+      const isBlocked = isIpBlockedCheck(g.ipAddress, blockedIpsList, true);
+      const cleanIp = extractCleanIp(g.ipAddress);
+      const displayIp = isBlocked ? `${cleanIp} - Block` : cleanIp;
+
       g.submissions.forEach((sub, subIdx) => {
         rows.push({
           'STT': stt++,
-          'Địa chỉ IP': g.ipAddress,
+          'Địa chỉ IP (Cột 9)': displayIp,
+          'Trạng thái chặn': isBlocked ? 'Đã chặn (- Block)' : 'Bình thường',
           'Lần nộp từ IP': `Lần ${subIdx + 1} / ${g.submissionCount}`,
           'Họ và tên học sinh': sub.studentName,
           'Lớp': sub.className,
@@ -119,8 +255,8 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
           'Điểm tối đa': sub.maxScore || 10,
           'Thời gian nộp bài': sub.endTime || sub.startTime || '',
           'Thời gian làm bài': sub.totalDuration || '',
-          'Phân loại vi phạm': g.isSameStudentMultipleTimes
-            ? 'Cùng 1 HS làm lại nhiều lần'
+          'Phân loại': g.isSameStudentMultipleTimes
+            ? 'Cùng 1 HS làm lại nhiều lần (Ôn luyện)'
             : 'Nhiều HS dùng chung 1 máy tính / IP',
           'Ghi chú': g.studentNames.join(', '),
         });
@@ -309,6 +445,163 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
           </div>
         </div>
 
+        {/* Thanh điều khiển Chế độ chặn IP vi phạm quy chế */}
+        <div className="bg-rose-50/60 px-2.5 py-1.5 sm:px-6 sm:py-2 border-b border-rose-200/80 flex items-center justify-between gap-2 flex-wrap text-xs flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-800 flex items-center gap-1.5">
+              <ShieldAlert className="w-4 h-4 text-rose-600 flex-shrink-0" />
+              <span>Chặn IP thủ công (- Block):</span>
+            </span>
+
+            {/* Nút gạt Toggle Bật/Tắt chặn IP */}
+            <button
+              type="button"
+              onClick={handleToggleGlobalBlocking}
+              className={`px-2.5 py-0.5 rounded-full font-black text-[11px] transition-all cursor-pointer border ${
+                isGlobalBlockingEnabled
+                  ? 'bg-rose-600 text-white border-rose-700 shadow-2xs'
+                  : 'bg-slate-200 text-slate-600 border-slate-300 hover:bg-slate-300'
+              }`}
+              title="Bật hoặc Tắt tính năng chặn các thiết bị có IP trong danh sách chặn"
+            >
+              {isGlobalBlockingEnabled ? 'ĐANG BẬT' : 'ĐANG TẮT'}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 text-[11px] text-slate-600 flex-wrap">
+            <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-medium">
+              💡 Không tự động chặn khi HS làm bài nhiều lần (để ôn luyện, rèn luyện)
+            </span>
+            <span>
+              Đang chặn: <strong className="font-mono font-black text-rose-700">{blockedIpsList.length}</strong> IP
+            </span>
+          </div>
+        </div>
+
+        {/* KHU VỰC CHẶN THỦ CÔNG TỪNG IP & QUẢN LÝ DANH SÁCH BỊ CHẶN */}
+        <div className="bg-gradient-to-r from-rose-50/70 via-amber-50/40 to-rose-50/70 px-2.5 py-2 sm:px-6 sm:py-2.5 border-b border-rose-200/80 flex flex-col gap-2 flex-shrink-0 text-xs">
+          {/* Hàng 1: Form nhập thủ công IP */}
+          <form
+            onSubmit={handleManualAddIp}
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2"
+          >
+            <div className="relative flex-1">
+              <ShieldAlert className="w-4 h-4 text-rose-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={manualIpInput}
+                onChange={(e) => setManualIpInput(e.target.value)}
+                placeholder="Nhập thủ công địa chỉ IP cần chặn (Ví dụ: 113.169.89.135 hoặc 14.161.42.12)..."
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg sm:rounded-xl border border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-500 text-xs font-mono bg-white shadow-2xs"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="submit"
+                className="px-3 py-1.5 rounded-lg sm:rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-2xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                title="Thêm IP này vào danh sách bị chặn (- Block)"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Chặn IP này</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsBlockedListExpanded(!isBlockedListExpanded)}
+                className={`px-2.5 py-1.5 rounded-lg sm:rounded-xl border font-semibold text-xs flex items-center justify-center gap-1 shadow-2xs transition-all cursor-pointer whitespace-nowrap ${
+                  isBlockedListExpanded
+                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                    : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+                }`}
+                title="Xem hoặc ẩn danh sách các IP đang bị chặn"
+              >
+                <Lock className="w-3.5 h-3.5 text-rose-600" />
+                <span>DS Chặn ({blockedIpsList.length})</span>
+                {isBlockedListExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </form>
+
+          {/* Thông báo kết quả tức thời (Toast) */}
+          {actionMessage && (
+            <div
+              className={`flex items-center justify-between px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                actionMessage.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                  : 'bg-rose-100 text-rose-800 border border-rose-300'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                {actionMessage.type === 'success' ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+                )}
+                <span>{actionMessage.text}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setActionMessage(null)}
+                className="text-slate-400 hover:text-slate-600 ml-2 cursor-pointer font-bold text-xs"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {/* Khu vực mở rộng: Danh sách chi tiết các IP đang bị khóa */}
+          {isBlockedListExpanded && (
+            <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-rose-200 shadow-inner mt-0.5 space-y-2">
+              <div className="flex items-center justify-between text-[11px] flex-wrap gap-1">
+                <span className="font-bold text-slate-800 flex items-center gap-1">
+                  <span>🔒 Thiết bị đang bị khóa không thể vào làm bài:</span>
+                  <span className="font-mono text-rose-600">({blockedIpsList.length} IP)</span>
+                </span>
+                {blockedIpsList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAllBlockedIps}
+                    className="text-rose-600 hover:text-rose-800 font-semibold text-[11px] underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Gỡ chặn tất cả</span>
+                  </button>
+                )}
+              </div>
+
+              {blockedIpsList.length === 0 ? (
+                <p className="text-slate-400 italic text-[11px] py-1.5 text-center">
+                  Hiện chưa có IP nào bị chặn. Thầy/Cô có thể nhập IP ở ô trên hoặc bấm &ldquo;Chặn IP (- Block)&rdquo; ở bảng danh sách bên dưới!
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                  {blockedIpsList.map((blockedItem, idx) => {
+                    const clean = extractCleanIp(blockedItem);
+                    return (
+                      <span
+                        key={`blocked_${clean}_${idx}`}
+                        className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-900 border border-rose-300 font-mono text-[11px] px-2.5 py-0.5 rounded-full shadow-2xs font-semibold"
+                      >
+                        <span>⛔</span>
+                        <span>{clean} - Block</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBlockedIp(blockedItem)}
+                          className="hover:bg-rose-200 text-rose-700 rounded-full w-4 h-4 flex items-center justify-center transition-colors cursor-pointer text-xs ml-0.5"
+                          title={`Mở chặn địa chỉ IP ${clean}`}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Filter and Search Bar - Gọn gàng trên mobile */}
         <div className="bg-white px-2.5 py-1.5 sm:px-6 sm:py-2.5 border-b border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-1.5 sm:gap-3 flex-shrink-0">
           {/* Tab Filters */}
@@ -451,10 +744,11 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
             filteredGroups.map((group, groupIdx) => {
               const isSameStudent = group.isSameStudentMultipleTimes;
               const hasScoreImprovement = group.maxScore > group.minScore;
+              const isGroupIpBlocked = isIpBlockedCheck(group.ipAddress, blockedIpsList, true);
 
               return (
                 <div
-                  key={group.ipAddress}
+                  key={`group_${group.ipAddress}_${groupIdx}`}
                   className="bg-white rounded-xl sm:rounded-2xl border border-rose-200/90 shadow-2xs hover:shadow-xs transition-all overflow-hidden"
                 >
                   {/* IP Group Header */}
@@ -465,11 +759,20 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                       </span>
 
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs sm:text-base font-extrabold text-slate-900 font-mono tracking-tight flex items-center gap-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-xs sm:text-base font-extrabold font-mono tracking-tight flex items-center gap-1 ${
+                            isGroupIpBlocked ? 'text-rose-900 font-black' : 'text-slate-900'
+                          }`}>
                             <Monitor className="w-3.5 h-3.5 text-rose-600" />
-                            {group.ipAddress}
+                            {isGroupIpBlocked ? `${extractCleanIp(group.ipAddress)} - Block` : group.ipAddress}
                           </span>
+
+                          {isGroupIpBlocked && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-black bg-rose-200 text-rose-900 border border-rose-400 font-mono flex items-center gap-1 shadow-2xs">
+                              <span>⛔</span>
+                              <span>ĐÃ CHẶN THỦ CÔNG</span>
+                            </span>
+                          )}
 
                           <button
                             onClick={() => handleCopyIp(group.ipAddress)}
@@ -515,6 +818,22 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                           {group.minScore} ➔ {group.maxScore}đ
                         </span>
                       )}
+
+                      {onUpdateConfig && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleBlockIp(group.ipAddress)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                            isGroupIpBlocked
+                              ? 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs'
+                              : 'bg-rose-600 hover:bg-rose-700 text-white shadow-2xs active:scale-95'
+                          }`}
+                          title={isGroupIpBlocked ? 'Mở khóa thiết bị này' : 'Chặn IP này không cho vào phòng thi'}
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                          <span>{isGroupIpBlocked ? 'Mở chặn IP' : 'Chặn IP (- Block)'}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -530,7 +849,10 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                           : 'text-rose-700 bg-rose-50 border-rose-200';
 
                       return (
-                        <div key={`${sub.studentName}-${sub.className}-${sIdx}`} className="p-2.5 flex items-center justify-between gap-2 hover:bg-slate-50">
+                        <div
+                          key={`mob_${group.ipAddress}_${sub.stt ?? sIdx}_${sub.studentName}_${sub.className}_${sub.endTime || ''}_${sIdx}`}
+                          className="p-2.5 flex items-center justify-between gap-2 hover:bg-slate-50"
+                        >
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 flex-shrink-0">
                               {sIdx + 1}
@@ -595,7 +917,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
 
                           return (
                             <tr
-                              key={`${sub.studentName}-${sub.className}-${sub.endTime || sIdx}`}
+                              key={`dt_${group.ipAddress}_${sub.stt ?? sIdx}_${sub.studentName}_${sub.className}_${sub.endTime || ''}_${sIdx}`}
                               className="hover:bg-slate-50 transition-colors"
                             >
                               <td className="py-2.5 px-4 text-center font-bold text-slate-500">
@@ -788,9 +1110,13 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                           </td>
                           <td
                             rowSpan={group.submissions.length}
-                            className="p-2 border border-slate-200 font-mono font-bold text-slate-900 align-top text-[11px]"
+                            className={`p-2 border border-slate-200 font-mono font-bold align-top text-[11px] ${
+                              isIpBlockedCheck(group.ipAddress, blockedIpsList, true) ? 'text-rose-900 bg-rose-50/50' : 'text-slate-900'
+                            }`}
                           >
-                            {group.ipAddress}
+                            {isIpBlockedCheck(group.ipAddress, blockedIpsList, true)
+                              ? `${extractCleanIp(group.ipAddress)} - Block`
+                              : group.ipAddress}
                             <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
                               ({group.submissionCount} bài)
                             </span>

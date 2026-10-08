@@ -93,9 +93,12 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     return !!ans.selectedOption;
   };
 
-  const handleSelectOption = (opt: string) => {
+  const handleSelectOption = (originalKey: string, displayedKey: string) => {
     playSelectSound();
-    onAnswerChange(currentQuestion.id, { selectedOption: opt });
+    onAnswerChange(currentQuestion.id, {
+      selectedOption: originalKey,
+      displayedOption: displayedKey,
+    });
   };
 
   const handleEssayChange = (val: string) => {
@@ -235,18 +238,22 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             {/* Answer Options */}
             {currentQuestion.type === 'Trắc nghiệm 1 đáp án' ? (
               <div className="space-y-2 sm:space-y-3">
-                {[
-                  { key: 'A', text: currentQuestion.optionA },
-                  { key: 'B', text: currentQuestion.optionB },
-                  { key: 'C', text: currentQuestion.optionC },
-                  { key: 'D', text: currentQuestion.optionD },
-                ].map(({ key, text }) => {
+                {(
+                  (currentQuestion as any).shuffledOptions || [
+                    { key: 'A', originalKey: 'A', text: currentQuestion.optionA },
+                    { key: 'B', originalKey: 'B', text: currentQuestion.optionB },
+                    { key: 'C', originalKey: 'C', text: currentQuestion.optionC },
+                    { key: 'D', originalKey: 'D', text: currentQuestion.optionD },
+                  ]
+                ).map(({ key, originalKey, text }: any) => {
                   if (!text && !key) return null;
-                  const isSelected = currentAnswer.selectedOption?.toUpperCase() === key;
+                  const isSelected =
+                    currentAnswer.selectedOption?.toUpperCase() === (originalKey || key).toUpperCase() ||
+                    currentAnswer.displayedOption?.toUpperCase() === key.toUpperCase();
                   return (
                     <button
                       key={key}
-                      onClick={() => handleSelectOption(key)}
+                      onClick={() => handleSelectOption(originalKey || key, key)}
                       className={`w-full text-left p-2.5 sm:p-4 rounded-xl border-2 transition-all flex items-start gap-2.5 sm:gap-3.5 cursor-pointer text-xs sm:text-sm ${
                         isSelected
                           ? 'bg-sky-50/90 border-sky-500 shadow-sm shadow-sky-100 ring-2 ring-sky-200'
@@ -271,6 +278,117 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                     </button>
                   );
                 })}
+              </div>
+            ) : currentQuestion.type === 'Đúng / Sai' ? (
+              <div className="space-y-3">
+                <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 font-medium flex items-center gap-2">
+                  <span className="text-base select-none">💡</span>
+                  <span>
+                    <strong>Câu hỏi Đúng / Sai:</strong> Đọc kỹ nội dung câu hỏi trên và bấm chọn <strong>ĐÚNG</strong> hoặc <strong>SAI</strong>.
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-1">
+                  {/* Option ĐÚNG */}
+                  {(() => {
+                    const isTrueSelected =
+                      currentAnswer.selectedOption === 'A' ||
+                      currentAnswer.selectedOption === 'Đúng' ||
+                      currentAnswer.displayedOption === 'Đúng';
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectOption('A', 'Đúng')}
+                        className={`w-full text-left p-4 sm:p-5 rounded-2xl border-2 transition-all flex items-center justify-between gap-3 cursor-pointer select-none group ${
+                          isTrueSelected
+                            ? 'bg-emerald-50 border-emerald-500 shadow-sm shadow-emerald-500/10 ring-2 ring-emerald-300'
+                            : 'bg-white border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3.5">
+                          <span
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0 transition-colors ${
+                              isTrueSelected
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-emerald-100 text-emerald-800 group-hover:bg-emerald-200'
+                            }`}
+                          >
+                            ✓
+                          </span>
+                          <div>
+                            <span className="block text-base sm:text-lg font-black text-emerald-950">
+                              {currentQuestion.optionA || 'ĐÚNG'}
+                            </span>
+                            <span className="text-xs text-slate-500 font-medium">
+                              Nhận định / khẳng định chính xác
+                            </span>
+                          </div>
+                        </div>
+
+                        <div
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
+                            isTrueSelected
+                              ? 'border-emerald-600 bg-emerald-600 text-white'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {isTrueSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
+                      </button>
+                    );
+                  })()}
+
+                  {/* Option SAI */}
+                  {(() => {
+                    const isFalseSelected =
+                      currentAnswer.selectedOption === 'B' ||
+                      currentAnswer.selectedOption === 'Sai' ||
+                      currentAnswer.displayedOption === 'Sai';
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectOption('B', 'Sai')}
+                        className={`w-full text-left p-4 sm:p-5 rounded-2xl border-2 transition-all flex items-center justify-between gap-3 cursor-pointer select-none group ${
+                          isFalseSelected
+                            ? 'bg-rose-50 border-rose-500 shadow-sm shadow-rose-500/10 ring-2 ring-rose-300'
+                            : 'bg-white border-slate-200 hover:border-rose-300 hover:bg-rose-50/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3.5">
+                          <span
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0 transition-colors ${
+                              isFalseSelected
+                                ? 'bg-rose-600 text-white shadow-xs'
+                                : 'bg-rose-100 text-rose-800 group-hover:bg-rose-200'
+                            }`}
+                          >
+                            ✕
+                          </span>
+                          <div>
+                            <span className="block text-base sm:text-lg font-black text-rose-950">
+                              {currentQuestion.optionB || 'SAI'}
+                            </span>
+                            <span className="text-xs text-slate-500 font-medium">
+                              Nhận định / khẳng định không chính xác
+                            </span>
+                          </div>
+                        </div>
+
+                        <div
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
+                            isFalseSelected
+                              ? 'border-rose-600 bg-rose-600 text-white'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {isFalseSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
+                      </button>
+                    );
+                  })()}
+                </div>
               </div>
             ) : (
               /* Tự luận answer box */
@@ -386,7 +504,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                     onClick={() => setCurrentIndex(idx)}
                     className={`h-9 rounded-lg font-bold text-xs flex items-center justify-center transition-all cursor-pointer border ${btnStyle}`}
                   >
-                    {q.orderNumber}
+                    {(q as any).displayOrderNumber || idx + 1}
                   </button>
                 );
               })}
@@ -452,7 +570,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                             answered ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'
                           }`}
                         >
-                          {q.orderNumber}
+                          {(q as any).displayOrderNumber || idx + 1}
                         </span>
                         <div>
                           <span className="text-xs font-semibold text-slate-800 line-clamp-1">
@@ -473,7 +591,14 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                         {answered ? (
                           <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg flex items-center gap-1">
                             <Check className="w-3.5 h-3.5" />
-                            <span>Đã làm: {q.type === 'Tự luận' ? ans.essayAnswer : ans.selectedOption}</span>
+                            <span>
+                              Đã làm:{' '}
+                              {q.type === 'Tự luận'
+                                ? ans.essayAnswer
+                                : q.type === 'Đúng / Sai'
+                                ? (ans.selectedOption === 'A' || ans.displayedOption === 'Đúng' ? 'Đúng' : 'Sai')
+                                : (ans.displayedOption || ans.selectedOption)}
+                            </span>
                           </span>
                         ) : (
                           <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg">

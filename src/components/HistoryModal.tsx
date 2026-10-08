@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { History, X, Trash2, Calendar, Clock, Eye, RefreshCw, FileSpreadsheet, FileText, CheckCircle2, Search, ShieldAlert, ArrowUpDown } from 'lucide-react';
-import { SubmissionRecord } from '../types';
+import { SubmissionRecord, ExamConfig } from '../types';
 import { matchSearchQuery } from '../utils/gradeService';
 import { compareSubmissionsNewestFirst } from '../utils/syncService';
+import { isIpBlockedCheck, extractCleanIp, formatBlockedIpString } from '../utils/ipViolationService';
 
 interface HistoryModalProps {
   isOpen: boolean;
@@ -14,6 +15,8 @@ interface HistoryModalProps {
   onRefreshFromSheet?: () => Promise<void>;
   onOpenViolations?: () => void;
   isSyncing?: boolean;
+  config?: ExamConfig;
+  onUpdateConfig?: (updatedConfig: Partial<ExamConfig>) => void;
 }
 
 export const HistoryModal: React.FC<HistoryModalProps> = ({
@@ -26,9 +29,31 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   onRefreshFromSheet,
   onOpenViolations,
   isSyncing = false,
+  config,
+  onUpdateConfig,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingRecord, setDeletingRecord] = useState<SubmissionRecord | null>(null);
+
+  const blockedIpsList = config?.blockedIps || [];
+
+  const handleToggleBlockIpFromHistory = (rawIp: string) => {
+    if (!config || !onUpdateConfig) return;
+    const clean = extractCleanIp(rawIp);
+    if (!clean) return;
+
+    const isCurrentlyBlocked = isIpBlockedCheck(clean, blockedIpsList, true);
+    let nextBlocked: string[] = [];
+    if (isCurrentlyBlocked) {
+      nextBlocked = blockedIpsList.filter((b) => extractCleanIp(b) !== clean);
+    } else {
+      nextBlocked = [...blockedIpsList, formatBlockedIpString(clean)];
+    }
+    onUpdateConfig({
+      ...config,
+      blockedIps: nextBlocked,
+    });
+  };
 
   // Count duplicate IPs
   const duplicateIpCount = useMemo(() => {
@@ -182,11 +207,55 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                     <span className="px-1.5 py-0.2 rounded text-[10px] sm:text-[11px] font-bold bg-sky-100 text-sky-800 uppercase flex-shrink-0">
                       Lớp {record.className}
                     </span>
-                    {record.ipAddress && (
-                      <span className="text-[9px] sm:text-[10px] font-mono text-slate-500 bg-slate-50 border border-slate-200 px-1 py-0.2 rounded flex-shrink-0">
-                        IP: {record.ipAddress}
-                      </span>
-                    )}
+                    {record.ipAddress && (() => {
+                      const cleanIp = extractCleanIp(record.ipAddress);
+                      const isBlocked = isIpBlockedCheck(cleanIp, blockedIpsList, true);
+                      const displayIpString = isBlocked ? `${cleanIp} - Block` : cleanIp;
+
+                      return (
+                        <span
+                          className={`text-[9px] sm:text-[10px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1.5 flex-shrink-0 border transition-all ${
+                            isBlocked
+                              ? 'bg-rose-100 text-rose-900 border-rose-300 font-bold shadow-2xs'
+                              : 'bg-slate-50 text-slate-600 border-slate-200'
+                          }`}
+                          title={isBlocked ? `IP ${displayIpString} đang bị Giáo viên chặn vào phòng thi` : `IP của thiết bị: ${cleanIp}`}
+                        >
+                          <span className="flex items-center gap-1">
+                            {isBlocked && <span className="text-rose-600">⛔</span>}
+                            <span>IP: <strong className={isBlocked ? 'text-rose-900 font-black' : 'text-slate-800'}>{displayIpString}</strong></span>
+                          </span>
+
+                          {onUpdateConfig && (
+                            isBlocked ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleBlockIpFromHistory(cleanIp);
+                                }}
+                                className="text-slate-600 hover:text-slate-900 hover:bg-rose-200/80 px-1 py-0.2 rounded text-[9px] ml-0.5 cursor-pointer font-sans transition-colors"
+                                title="Bấm để GỠ CHẶN cho IP này"
+                              >
+                                (Gỡ chặn)
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleBlockIpFromHistory(cleanIp);
+                                }}
+                                className="text-rose-700 hover:text-white hover:bg-rose-600 px-1.5 py-0.2 rounded border border-rose-300 hover:border-rose-600 text-[9px] font-bold ml-0.5 transition-colors cursor-pointer bg-white"
+                                title="Bấm để chặn thủ công IP này (Thêm hậu tố - Block)"
+                              >
+                                + Chặn (- Block)
+                              </button>
+                            )
+                          )}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-[11px] text-slate-500">

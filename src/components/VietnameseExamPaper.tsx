@@ -104,11 +104,18 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
     }));
   }, [submission, questions]);
 
-  // Separate Multiple Choice and Essay questions
+  // Separate Multiple Choice, True/False, and Essay questions
   const mcResults = React.useMemo(() => {
     return questionResults.filter((qr) => {
       const q = questions.find((item) => item.id === qr.questionId || item.orderNumber === qr.orderNumber);
       return !q || q.type === 'Trắc nghiệm 1 đáp án';
+    });
+  }, [questionResults, questions]);
+
+  const tfResults = React.useMemo(() => {
+    return questionResults.filter((qr) => {
+      const q = questions.find((item) => item.id === qr.questionId || item.orderNumber === qr.orderNumber);
+      return q && q.type === 'Đúng / Sai';
     });
   }, [questionResults, questions]);
 
@@ -118,6 +125,15 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
       return q && q.type === 'Tự luận';
     });
   }, [questionResults, questions]);
+
+  const sectionLabels = React.useMemo(() => {
+    const list = ['I', 'II', 'III'];
+    let idx = 0;
+    const mcLabel = mcResults.length > 0 ? list[idx++] : 'I';
+    const tfLabel = tfResults.length > 0 ? list[idx++] : 'II';
+    const essayLabel = essayResults.length > 0 ? list[idx++] : 'III';
+    return { mcLabel, tfLabel, essayLabel };
+  }, [mcResults.length, tfResults.length, essayResults.length]);
 
   const correctCount = questionResults.filter((q) => q.isCorrect).length;
   const totalQuestions = questionResults.length || questions.length || 1;
@@ -323,15 +339,15 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
           </div>
         </div>
 
-        {/* SECTION I: TRẮC NGHIỆM */}
+        {/* SECTION I: TRẮC NGHIỆM 4 LỰA CHỌN */}
         {mcResults.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center justify-between pb-1 mb-2 border-b border-slate-800">
               <h3 className="font-bold text-xs uppercase tracking-wide text-slate-900">
-                I. PHẦN TRẮC NGHIỆM ({mcResults.length} câu)
+                {sectionLabels.mcLabel}. PHẦN TRẮC NGHIỆM ({mcResults.length} câu)
               </h3>
               <span className="text-[11px] text-slate-600 italic">
-                (Phiếu trả lời trắc nghiệm của học sinh)
+                (Phiếu trả lời trắc nghiệm 4 lựa chọn của học sinh)
               </span>
             </div>
 
@@ -423,13 +439,114 @@ export const VietnameseExamPaper: React.FC<VietnameseExamPaperProps> = ({
           </div>
         )}
 
-        {/* SECTION II: TỰ LUẬN (If any essay questions exist) */}
+        {/* SECTION: TRẮC NGHIỆM ĐÚNG / SAI */}
+        {tfResults.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between pb-1 mb-2 border-b border-slate-800">
+              <h3 className="font-bold text-xs uppercase tracking-wide text-slate-900">
+                {sectionLabels.tfLabel}. PHẦN TRẮC NGHIỆM ĐÚNG / SAI ({tfResults.length} câu)
+              </h3>
+              <span className="text-[11px] text-slate-600 italic">
+                (Phiếu trả lời trắc nghiệm Đúng hoặc Sai của học sinh)
+              </span>
+            </div>
+
+            <div className="border border-slate-800 rounded-sm overflow-x-auto mb-3 bg-white">
+              <table className="w-full text-center border-collapse text-xs font-sans">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-400">
+                    <td className="p-1 px-2 border-r border-slate-400 text-[11px] font-serif font-extrabold bg-slate-200 whitespace-nowrap min-w-[70px]">
+                      Câu
+                    </td>
+                    {tfResults.map((r, idx) => (
+                      <td key={r.questionId || idx} className="p-1 border-r border-slate-300 font-bold min-w-[46px] text-[11px]">
+                        {r.orderNumber || idx + 1}
+                      </td>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-300">
+                  {/* Selected Answer Row */}
+                  <tr className="bg-white">
+                    <td className="p-1 px-2 border-r border-slate-400 text-[10px] font-serif font-bold text-slate-700 bg-slate-50 whitespace-nowrap">
+                      HS chọn
+                    </td>
+                    {tfResults.map((r, idx) => {
+                      const isBlank = !r.studentAnswer || r.studentAnswer.trim() === '' || r.studentAnswer === '-';
+                      return (
+                        <td
+                          key={r.questionId || idx}
+                          className={`p-1 border-r border-slate-300 font-sans font-bold text-xs ${
+                            isBlank
+                              ? 'text-slate-300 font-normal'
+                              : r.isCorrect
+                              ? 'text-emerald-900 bg-emerald-50/50'
+                              : 'text-rose-700 bg-rose-50/40'
+                          }`}
+                        >
+                          {isBlank ? '-' : r.studentAnswer}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  {/* Evaluation Row (Kết quả: Đúng / Sai) */}
+                  <tr className="bg-slate-50/70 text-[10px] font-bold">
+                    <td className="p-0.5 px-2 border-r border-slate-400 text-[10px] font-serif font-bold text-slate-700 bg-slate-100 whitespace-nowrap">
+                      Kết quả
+                    </td>
+                    {tfResults.map((r, idx) => (
+                      <td
+                        key={r.questionId || idx}
+                        className={`p-0.5 border-r border-slate-300 font-extrabold text-[10px] ${
+                          r.isCorrect ? 'text-emerald-700' : 'text-red-600'
+                        }`}
+                      >
+                        {r.isCorrect ? 'Đúng' : 'Sai'}
+                      </td>
+                    ))}
+                  </tr>
+                  {/* Correct Answer Row - CHỈ HIỂN THỊ KHI GIÁO VIÊN BẬT */}
+                  {showCorrectAnswers && (
+                    <tr className="bg-emerald-50 text-[10px] font-sans font-bold text-emerald-900">
+                      <td className="p-0.5 px-2 border-r border-slate-400 text-[10px] font-serif font-bold text-emerald-900 bg-emerald-100">
+                        Đ/A chuẩn
+                      </td>
+                      {tfResults.map((r, idx) => {
+                        const qObj = questions.find((q) => q.id === r.questionId);
+                        const rawAns = r.correctAnswer || qObj?.correctAnswer || '-';
+                        const displayAns = rawAns === 'A' ? 'Đúng' : rawAns === 'B' ? 'Sai' : rawAns;
+                        return (
+                          <td key={r.questionId || idx} className="p-0.5 border-r border-slate-300 font-black text-emerald-800">
+                            {displayAns}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )}
+                  {/* Score per question */}
+                  <tr className="text-[10px] font-mono text-slate-600">
+                    <td className="p-0.5 px-2 border-r border-slate-400 text-[10px] font-serif text-slate-600 bg-slate-50">
+                      Điểm
+                    </td>
+                    {tfResults.map((r, idx) => (
+                      <td key={r.questionId || idx} className="p-0.5 border-r border-slate-300 font-semibold">
+                        {String(r.earnedPoints).replace('.', ',')}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* SECTION: TỰ LUẬN (If any essay questions exist) */}
         {essayResults.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center justify-between pb-1 mb-2 border-b border-slate-800">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-bold text-xs uppercase tracking-wide text-slate-900">
-                  II. PHẦN TỰ LUẬN ({essayResults.length} câu)
+                  {sectionLabels.essayLabel}. PHẦN TỰ LUẬN ({essayResults.length} câu)
                 </h3>
                 {isTeacherMode && !isExportingImage && onToggleEssayCorrect && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 print:hidden hide-on-export">
