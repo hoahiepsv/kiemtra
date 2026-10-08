@@ -8,6 +8,10 @@ export const DEFAULT_EXAM_CONFIG: ExamConfig = {
   copyrightText: 'Lê Hoà Hiệp - 0983.676.470',
   data1Url: 'https://script.google.com/macros/s/AKfycbxdxVRbNGgLoTtofRU9BeB8NLxQyU3z2dAmiGndNwOjJ8T9NzioN0VsVTaipKwg8KBOpw/exec',
   data2Url: 'https://script.google.com/macros/s/AKfycbw2ArWfvmE9lJQQRrUNIv6y_EXS8yOzdVRF7AILq3MXjRiNjgwooOsco_4TeCoC2O3o/exec',
+  shuffleQuestions: true,
+  shuffleOptions: true,
+  enableIpBlocking: true,
+  blockedIps: [],
 };
 
 export const DEFAULT_QUESTIONS: Question[] = [];
