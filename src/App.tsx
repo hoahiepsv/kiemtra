@@ -26,6 +26,7 @@ import {
   DEFAULT_QUESTIONS,
 } from './data/defaultExamData';
 import { formatScoreItem } from './utils/scoreStringUtils';
+import { generateShuffledExam, ShuffledQuestion } from './utils/shuffleExam';
 import {
   ExamConfig,
   Question,
@@ -57,6 +58,7 @@ import {
 import { checkEssayAnswerMatch } from './utils/gradeService';
 import { fetchClientIp } from './utils/ipService';
 import { formatStudentName, formatClassName } from './utils/studentFormatting';
+import { isIpBlockedCheck, formatBlockedIpString } from './utils/ipViolationService';
 
 type AppScreen = 'start' | 'exam' | 'result';
 
@@ -120,6 +122,7 @@ export default function App() {
   const [startTimestamp, setStartTimestamp] = useState<number>(0);
   const [remainingSeconds, setRemainingSeconds] = useState(config.durationMinutes * 60);
   const [lastSavedText, setLastSavedText] = useState('Đã lưu nháp tự động');
+  const [examQuestions, setExamQuestions] = useState<ShuffledQuestion[]>([]);
 
   // Submissions state
   const [activeSubmission, setActiveSubmission] = useState<SubmissionRecord | null>(null);
@@ -342,6 +345,7 @@ export default function App() {
               remainingSeconds: prev,
               currentQuestionIndex: 0,
               lastSavedAt: new Date().toLocaleTimeString('vi-VN'),
+              shuffledQuestions: examQuestions,
             });
             setLastSavedText('Đã lưu nháp tự động ' + new Date().toLocaleTimeString('vi-VN'));
           }
@@ -369,7 +373,7 @@ export default function App() {
         timerRef.current = null;
       }
     };
-  }, [screen, studentName, className, answers, startFormattedTime, startTimestamp]);
+  }, [screen, studentName, className, answers, startFormattedTime, startTimestamp, examQuestions]);
 
   // 3. Start Exam Action
   const handleStartExam = (name: string, cls: string) => {
@@ -378,6 +382,14 @@ export default function App() {
     const now = new Date();
     const formattedStart = formatDateForSheet(now);
     const ts = now.getTime();
+
+    // Sinh đề thi hoán đổi ngẫu nhiên câu hỏi & đáp án (theo cấu hình cài đặt)
+    const shuffled = generateShuffledExam(
+      questions,
+      config.shuffleQuestions !== false,
+      config.shuffleOptions !== false
+    );
+    setExamQuestions(shuffled);
 
     setStudentName(formattedName);
     setClassName(formattedClass);
@@ -396,6 +408,7 @@ export default function App() {
       remainingSeconds: config.durationMinutes * 60,
       currentQuestionIndex: 0,
       lastSavedAt: now.toLocaleTimeString('vi-VN'),
+      shuffledQuestions: shuffled,
     });
     setExistingDraft(null);
 
@@ -411,9 +424,22 @@ export default function App() {
     if (!existingDraft) return;
     const formattedName = formatStudentName(existingDraft.studentInfo.fullName);
     const formattedClass = formatClassName(existingDraft.studentInfo.className);
+
+    // Khôi phục đúng đề thi đã xáo trộn của học sinh (tránh bị xáo lại lần 2)
+    if (existingDraft.shuffledQuestions && existingDraft.shuffledQuestions.length > 0) {
+      setExamQuestions(existingDraft.shuffledQuestions);
+    } else {
+      const shuffled = generateShuffledExam(
+        questions,
+        config.shuffleQuestions !== false,
+        config.shuffleOptions !== false
+      );
+      setExamQuestions(shuffled);
+    }
+
     setStudentName(formattedName);
     setClassName(formattedClass);
-    setAnswers(existingDraft.answers);
+    setAnswers(existingDraft.answers || {});
     setStartFormattedTime(existingDraft.startTime);
     setStartTimestamp(existingDraft.startTimestamp);
     setRemainingSeconds(existingDraft.remainingSeconds);
@@ -443,6 +469,7 @@ export default function App() {
         remainingSeconds,
         currentQuestionIndex: 0,
         lastSavedAt: new Date().toLocaleTimeString('vi-VN'),
+        shuffledQuestions: examQuestions,
       });
       setLastSavedText('Đã lưu nháp tự động ' + new Date().toLocaleTimeString('vi-VN'));
 
@@ -460,6 +487,7 @@ export default function App() {
       remainingSeconds,
       currentQuestionIndex: 0,
       lastSavedAt: new Date().toLocaleTimeString('vi-VN'),
+      shuffledQuestions: examQuestions,
     });
     setLastSavedText('Đã lưu nháp thủ công ' + new Date().toLocaleTimeString('vi-VN'));
     setSyncToast('Đã lưu nháp thành công vào bộ nhớ trình duyệt!');
@@ -495,16 +523,37 @@ export default function App() {
           let answerText = '';
           let isBlank = false;
 
+          let displayStudentAnswer = '';
+          let displayCorrectAnswer = q.correctAnswer;
+
           if (q.type === 'Trắc nghiệm 1 đáp án') {
             answerText = studentAns?.selectedOption ? studentAns.selectedOption.trim() : '';
             isBlank = !answerText;
             isCorrect =
               !isBlank && answerText.toUpperCase() === q.correctAnswer.trim().toUpperCase();
+            displayStudentAnswer = isBlank ? '' : answerText.trim();
+            displayCorrectAnswer = q.correctAnswer.trim();
+          } else if (q.type === 'Đúng / Sai') {
+            answerText = studentAns?.selectedOption ? studentAns.selectedOption.trim() : '';
+            isBlank = !answerText;
+            const normAns = answerText.toUpperCase();
+            const normCorrect = q.correctAnswer.trim().toUpperCase();
+            const isAnsTrue = normAns === 'A' || normAns === 'ĐÚNG' || normAns === 'DUNG' || normAns === 'TRUE';
+            const isAnsFalse = normAns === 'B' || normAns === 'SAI' || normAns === 'FALSE';
+            const isCorrectTrue = normCorrect === 'A' || normCorrect === 'ĐÚNG' || normCorrect === 'DUNG' || normCorrect === 'TRUE';
+            const isCorrectFalse = normCorrect === 'B' || normCorrect === 'SAI' || normCorrect === 'FALSE';
+
+            isCorrect = !isBlank && ((isAnsTrue && isCorrectTrue) || (isAnsFalse && isCorrectFalse));
+            displayStudentAnswer = isBlank ? '' : (isAnsTrue ? 'Đúng' : isAnsFalse ? 'Sai' : answerText);
+            displayCorrectAnswer = isCorrectTrue ? 'Đúng' : isCorrectFalse ? 'Sai' : q.correctAnswer;
+            answerText = displayStudentAnswer;
           } else {
             // Tự luận: so khớp không phân biệt hoa/thường, khoảng trắng thừa và dấu tiếng Việt
             answerText = studentAns?.essayAnswer ? studentAns.essayAnswer.trim() : '';
             isBlank = !answerText;
             isCorrect = !isBlank && checkEssayAnswerMatch(answerText, q.correctAnswer);
+            displayStudentAnswer = isBlank ? '' : answerText.trim();
+            displayCorrectAnswer = q.correctAnswer.trim();
           }
 
           const earned = isCorrect ? q.points : 0;
@@ -518,12 +567,12 @@ export default function App() {
           return {
             questionId: q.id,
             orderNumber: qNumber,
-            studentAnswer: isBlank ? '' : answerText.trim(),
-            correctAnswer: q.correctAnswer,
+            studentAnswer: displayStudentAnswer,
+            correctAnswer: displayCorrectAnswer,
             isCorrect,
             earnedPoints: earned,
             maxPoints: q.points,
-            category: q.category || 'Kiến thức chung',
+            category: q.category || (q.type === 'Đúng / Sai' ? 'Đúng / Sai' : 'Kiến thức chung'),
           };
         });
 
@@ -541,6 +590,9 @@ export default function App() {
           ? Math.max(...existingHistory.map((h) => Number(h.stt) || 0), 0) + 1
           : 1;
 
+        const isClientBlocked = isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true);
+        const recordedIp = isClientBlocked && clientIp ? formatBlockedIpString(clientIp) : clientIp;
+
         const record: SubmissionRecord = {
           stt: nextSTT,
           studentName: formatStudentName(studentName || 'Học sinh'),
@@ -551,7 +603,7 @@ export default function App() {
           startTime: startFormattedTime || endTime,
           endTime,
           totalDuration,
-          ipAddress: clientIp,
+          ipAddress: recordedIp,
           timestamp: Date.now(),
           syncedToData2: false,
           questionResults,
@@ -702,6 +754,7 @@ export default function App() {
     setActiveSubmission(null);
     setAnswers({});
     setExistingDraft(null);
+    setExamQuestions([]);
   };
 
   return (
@@ -758,7 +811,7 @@ export default function App() {
             config={config}
             studentName={studentName}
             className={className}
-            questions={questions}
+            questions={examQuestions.length > 0 ? examQuestions : questions}
             answers={answers}
             onAnswerChange={handleAnswerChange}
             remainingSeconds={remainingSeconds}
@@ -889,6 +942,8 @@ export default function App() {
           const updated = deleteSubmissionFromHistory(sub.studentName, sub.className, sub.endTime);
           setHistoryList(updated);
         }}
+        config={config}
+        onUpdateConfig={handleSaveConfig}
       />
 
       {/* MODAL 1.75: Violation Warning (Duplicate IP Detection) */}
@@ -905,6 +960,8 @@ export default function App() {
           setPreviewSubmission(sub);
           setShowPdfModal(true);
         }}
+        config={config}
+        onUpdateConfig={handleSaveConfig}
       />
 
       {/* MODAL 1.8: Class Excel Export (*.xlsx) */}

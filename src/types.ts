@@ -1,4 +1,4 @@
-export type QuestionType = 'Trắc nghiệm 1 đáp án' | 'Tự luận';
+export type QuestionType = 'Trắc nghiệm 1 đáp án' | 'Đúng / Sai' | 'Tự luận';
 
 export interface Question {
   id: number;
@@ -23,11 +23,16 @@ export interface ExamConfig {
   copyrightText: string; // Lê Hoà Hiệp - 0983.676.470
   data1Url?: string;
   data2Url?: string;
+  shuffleQuestions?: boolean; // Tự động xáo trộn thứ tự các câu hỏi khi học sinh làm bài
+  shuffleOptions?: boolean; // Tự động xáo trộn thứ tự các đáp án A, B, C, D của câu trắc nghiệm
+  enableIpBlocking?: boolean; // Nút gạt Bật/Tắt chặn IP vi phạm quy chế kiểm tra
+  blockedIps?: string[]; // Danh sách các IP bị chặn (kèm hậu tố "- Block")
 }
 
 export interface StudentAnswer {
   questionId: number;
-  selectedOption?: string; // 'A' | 'B' | 'C' | 'D'
+  selectedOption?: string; // 'A' | 'B' | 'C' | 'D' (MÃ ĐÁP ÁN ĐỀ GỐC để chấm điểm & lưu trữ)
+  displayedOption?: string; // Nhãn đáp án hiển thị trên màn hình học sinh (A, B, C, D)
   essayAnswer?: string;
   isFlagged?: boolean; // Đánh dấu xem lại
 }
@@ -79,6 +84,7 @@ export interface DraftExam {
   remainingSeconds: number;
   currentQuestionIndex: number;
   lastSavedAt: string;
+  shuffledQuestions?: any[]; // Bảo toàn đề thi đã xáo trộn khi học sinh tải lại trang (F5)
 }
 
 export type AdminRole = 'superadmin' | 'subadmin';
