@@ -16,7 +16,13 @@ export function analyzeStudentSkills(
 
   // Build category totals
   questions.forEach(q => {
-    const cat = q.category || (q.type === 'Tự luận' ? 'Tự luận & Tính toán' : 'Trắc nghiệm cơ bản');
+    const cat =
+      q.category ||
+      (q.type === 'Tự luận'
+        ? 'Tự luận & Tính toán'
+        : q.type === 'Đúng / Sai'
+        ? 'Trắc nghiệm Đúng / Sai'
+        : 'Trắc nghiệm cơ bản');
     if (!categoryMap[cat]) {
       categoryMap[cat] = { earned: 0, total: 0, count: 0, correctCount: 0 };
     }

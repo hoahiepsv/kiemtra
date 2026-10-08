@@ -122,3 +122,103 @@ export function detectIpViolations(submissions: SubmissionRecord[]): IpViolation
   // Bước 3: Sắp xếp theo mức độ vi phạm (IP làm nhiều lần nhất lên đầu)
   return violationGroups.sort((a, b) => b.submissionCount - a.submissionCount);
 }
+
+/**
+ * Trích xuất địa chỉ IP thuần (loại bỏ hậu tố "- Block", "- Blocked", khoảng trắng...)
+ * Ví dụ: "113.169.89.135 - Block" -> "113.169.89.135"
+ */
+export function extractCleanIp(ipStr: string | null | undefined): string {
+  if (!ipStr) return '';
+  let ip = String(ipStr).trim();
+  ip = ip.replace(/\s*-\s*block(ed)?\b/gi, '');
+  return normalizeIpAddress(ip);
+}
+
+/**
+ * Định dạng địa chỉ IP kèm hậu tố "- Block"
+ * Ví dụ: "113.169.89.135" -> "113.169.89.135 - Block"
+ */
+export function formatBlockedIpString(ip: string): string {
+  const clean = extractCleanIp(ip);
+  return clean ? `${clean} - Block` : '';
+}
+
+/**
+ * Kiểm tra xem một địa chỉ IP có nằm trong danh sách chặn hay không (Độ phức tạp O(K) siêu nhanh < 0.0001s)
+ */
+export function isIpBlockedCheck(
+  clientIp: string | null | undefined,
+  blockedIpsList: string[] | undefined,
+  enableBlocking = true
+): boolean {
+  if (!enableBlocking || !clientIp || !blockedIpsList || blockedIpsList.length === 0) {
+    return false;
+  }
+  const cleanClient = extractCleanIp(clientIp);
+  if (!cleanClient) return false;
+
+  return blockedIpsList.some((blockedItem) => {
+    const cleanBlocked = extractCleanIp(blockedItem);
+    return cleanBlocked && cleanBlocked === cleanClient;
+  });
+}
+
+/**
+ * Kiểm tra định dạng cơ bản của địa chỉ IPv4
+ */
+export function isValidIpFormat(ip: string): boolean {
+  const clean = extractCleanIp(ip);
+  if (!clean) return false;
+  // Cho phép IPv4 dạng x.x.x.x
+  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+  if (ipv4Regex.test(clean)) {
+    const parts = clean.split('.').map(Number);
+    return parts.every((p) => p >= 0 && p <= 255);
+  }
+  // Hoặc chấp nhận chuỗi IP hợp lệ bất kỳ (IPv6 hoặc dạng tên máy)
+  return clean.length >= 3 && clean.length <= 45;
+}
+
+/**
+ * Thêm một địa chỉ IP vào danh sách chặn thủ công (tự động gắn hậu tố "- Block")
+ */
+export function addIpToBlockedList(
+  newIp: string,
+  currentList: string[] = []
+): { success: boolean; list: string[]; message: string; formattedIp?: string } {
+  const clean = extractCleanIp(newIp);
+  if (!clean) {
+    return {
+      success: false,
+      list: currentList,
+      message: 'Vui lòng nhập một địa chỉ IP hợp lệ (ví dụ: 113.169.89.135)!',
+    };
+  }
+
+  if (isIpBlockedCheck(clean, currentList, true)) {
+    return {
+      success: false,
+      list: currentList,
+      message: `Địa chỉ IP ${clean} đã có trong danh sách chặn rồi!`,
+    };
+  }
+
+  const formatted = formatBlockedIpString(clean);
+  const nextList = [...currentList, formatted];
+  return {
+    success: true,
+    list: nextList,
+    message: `Đã chặn thành công IP: ${formatted}`,
+    formattedIp: formatted,
+  };
+}
+
+/**
+ * Xóa/Mở chặn một địa chỉ IP khỏi danh sách chặn
+ */
+export function removeIpFromBlockedList(targetIp: string, currentList: string[] = []): string[] {
+  const clean = extractCleanIp(targetIp);
+  if (!clean) return currentList;
+  return currentList.filter((item) => extractCleanIp(item) !== clean);
+}
+

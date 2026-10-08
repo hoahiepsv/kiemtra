@@ -1,4 +1,4 @@
-import { SubmissionRecord, DraftExam, Question, ExamConfig } from '../types';
+import { SubmissionRecord, DraftExam, Question, ExamConfig, QuestionType } from '../types';
 import { formatExamDateTime, formatExamDuration } from './dateUtils';
 import { parseScoreStringDetailed } from './scoreStringUtils';
 
@@ -488,20 +488,30 @@ export async function fetchQuestionsFromData1(data1Url: string): Promise<{
       }
 
       // Đảm bảo các câu hỏi có id và orderNumber chuẩn
-      const questions: Question[] = json.questions.map((q: any, idx: number) => ({
-        id: q.id || idx + 1,
-        orderNumber: q.orderNumber || idx + 1,
-        type: q.type === 'Tự luận' ? 'Tự luận' : 'Trắc nghiệm 1 đáp án',
-        content: q.content || `Câu hỏi ${idx + 1}`,
-        optionA: q.optionA || '',
-        optionB: q.optionB || '',
-        optionC: q.optionC || '',
-        optionD: q.optionD || '',
-        correctAnswer: q.correctAnswer ? String(q.correctAnswer).trim() : '',
-        points: Number(q.points) || 0.5,
-        category: q.category || (q.type === 'Tự luận' ? 'Tự luận & Tính toán' : 'Trắc nghiệm'),
-        explanation: q.explanation || '',
-      }));
+      const questions: Question[] = json.questions.map((q: any, idx: number) => {
+        const rawType = String(q.type || '').toLowerCase();
+        let normalizedType: QuestionType = 'Trắc nghiệm 1 đáp án';
+        if (rawType.includes('tự luận') || rawType.includes('tu luan')) {
+          normalizedType = 'Tự luận';
+        } else if (rawType.includes('đúng') || rawType.includes('dung') || rawType.includes('sai') || rawType.includes('true') || rawType.includes('false')) {
+          normalizedType = 'Đúng / Sai';
+        }
+
+        return {
+          id: q.id || idx + 1,
+          orderNumber: q.orderNumber || idx + 1,
+          type: normalizedType,
+          content: q.content || `Câu hỏi ${idx + 1}`,
+          optionA: q.optionA || (normalizedType === 'Đúng / Sai' ? 'Đúng' : ''),
+          optionB: q.optionB || (normalizedType === 'Đúng / Sai' ? 'Sai' : ''),
+          optionC: q.optionC || '',
+          optionD: q.optionD || '',
+          correctAnswer: q.correctAnswer ? String(q.correctAnswer).trim() : '',
+          points: Number(q.points) || 0.5,
+          category: q.category || (normalizedType === 'Tự luận' ? 'Tự luận & Tính toán' : normalizedType === 'Đúng / Sai' ? 'Đúng / Sai' : 'Trắc nghiệm'),
+          explanation: q.explanation || '',
+        };
+      });
 
       return { config, questions };
     }

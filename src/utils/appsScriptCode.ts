@@ -75,20 +75,26 @@ function doGet(e) {
         var correctAns = (row[7] !== undefined && row[7] !== null) ? row[7].toString().trim() : "";
         var pts = parseFloat(row[8]) || 1.0;
 
-        var normalizedType = qType.toLowerCase().indexOf("tự luận") !== -1 ? "Tự luận" : "Trắc nghiệm 1 đáp án";
+        var qTypeLower = qType.toLowerCase();
+        var normalizedType = "Trắc nghiệm 1 đáp án";
+        if (qTypeLower.indexOf("tự luận") !== -1 || qTypeLower.indexOf("tu luan") !== -1) {
+          normalizedType = "Tự luận";
+        } else if (qTypeLower.indexOf("đúng") !== -1 || qTypeLower.indexOf("dung") !== -1 || qTypeLower.indexOf("sai") !== -1 || qTypeLower.indexOf("true") !== -1 || qTypeLower.indexOf("false") !== -1) {
+          normalizedType = "Đúng / Sai";
+        }
 
         questions.push({
           id: i + 1,
           orderNumber: qOrder,
           type: normalizedType,
           content: qContent,
-          optionA: optA,
-          optionB: optB,
+          optionA: optA || (normalizedType === "Đúng / Sai" ? "Đúng" : ""),
+          optionB: optB || (normalizedType === "Đúng / Sai" ? "Sai" : ""),
           optionC: optC,
           optionD: optD,
           correctAnswer: correctAns,
           points: pts,
-          category: normalizedType === "Tự luận" ? "Tự luận & Tính toán" : "Trắc nghiệm cơ bản"
+          category: normalizedType === "Tự luận" ? "Tự luận & Tính toán" : (normalizedType === "Đúng / Sai" ? "Trắc nghiệm Đúng / Sai" : "Trắc nghiệm cơ bản")
         });
       }
     }
@@ -834,7 +840,7 @@ function kiemTraTrungLapIP() {
         rec.totalScore,
         rec.endTime,
         rec.duration,
-        isSameStudent ? "Cùng 1 HS làm lại nhiều lần" : "Nhiều HS dùng chung 1 máy tính / IP"
+        isSameStudent ? "Cùng 1 HS làm lại nhiều lần (Ôn luyện)" : "Nhiều HS dùng chung 1 máy tính / IP"
       ]);
     }
   }
@@ -987,20 +993,25 @@ function doGet(e) {
         if (!contentText) continue;
 
         var typeStr = String(qRow[0] || "").toLowerCase();
-        var isEssay = typeStr.indexOf("tự luận") !== -1 || typeStr.indexOf("tu luan") !== -1;
+        var normalizedType = "Trắc nghiệm 1 đáp án";
+        if (typeStr.indexOf("tự luận") !== -1 || typeStr.indexOf("tu luan") !== -1) {
+          normalizedType = "Tự luận";
+        } else if (typeStr.indexOf("đúng") !== -1 || typeStr.indexOf("dung") !== -1 || typeStr.indexOf("sai") !== -1 || typeStr.indexOf("true") !== -1 || typeStr.indexOf("false") !== -1) {
+          normalizedType = "Đúng / Sai";
+        }
 
         questionsList.push({
           id: qIdx + 1,
           orderNumber: qRow[1] || (qIdx + 1),
-          type: isEssay ? "Tự luận" : "Trắc nghiệm 1 đáp án",
+          type: normalizedType,
           content: contentText,
-          optionA: String(qRow[3] || "").trim(),
-          optionB: String(qRow[4] || "").trim(),
+          optionA: String(qRow[3] || (normalizedType === "Đúng / Sai" ? "Đúng" : "")).trim(),
+          optionB: String(qRow[4] || (normalizedType === "Đúng / Sai" ? "Sai" : "")).trim(),
           optionC: String(qRow[5] || "").trim(),
           optionD: String(qRow[6] || "").trim(),
           correctAnswer: (qRow[7] !== undefined && qRow[7] !== null) ? String(qRow[7]).trim() : "",
           points: parseFloat(qRow[8]) || 1.0,
-          category: isEssay ? "Tự luận & Tính toán" : "Trắc nghiệm cơ bản"
+          category: normalizedType === "Tự luận" ? "Tự luận & Tính toán" : (normalizedType === "Đúng / Sai" ? "Trắc nghiệm Đúng / Sai" : "Trắc nghiệm cơ bản")
         });
       }
     }
