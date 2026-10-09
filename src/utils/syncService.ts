@@ -1,6 +1,7 @@
 import { SubmissionRecord, DraftExam, Question, ExamConfig, QuestionType } from '../types';
 import { formatExamDateTime, formatExamDuration } from './dateUtils';
 import { parseScoreStringDetailed } from './scoreStringUtils';
+import { extractCleanIp, formatBlockedIpString, hasBlockMarker, extractBlockedIpsFromSubmissions } from './ipViolationService';
 
 const DRAFT_STORAGE_KEY = 'kiem_tra_thuong_xuyen_draft';
 const UNSYNCED_STORAGE_KEY = 'kiem_tra_thuong_xuyen_unsynced';
@@ -410,6 +411,8 @@ export async function sendSubmissionToData2(
     clientIp: record.ipAddress || '',
     col9: record.ipAddress || '',
     ipThueBao: record.ipAddress || '',
+    status: record.status || (record.isBlocked ? 'Chặn' : '') || '',
+    isBlocked: record.isBlocked === true,
   };
 
   try {
@@ -438,6 +441,76 @@ export async function sendSubmissionToData2(
       message: isUpdate
         ? 'Không thể kết nối đến Google Sheets. Điểm đã được lưu trên máy của bạn!'
         : 'Mất kết nối mạng. Đã lưu vào hàng đợi ngoại tuyến và sẽ tự động đồng bộ khi có mạng lại!',
+    };
+  }
+}
+
+/**
+ * 4.5. Gửi cập nhật trạng thái Chặn / Mở chặn IP lên Google Sheets data2
+ * Ghi trạng thái "Chặn" sang Cột J (Trạng thái) và giữ sạch IP thuần ở Cột I
+ */
+export async function sendIpBlockUpdateToSheet(
+  data2Url: string | undefined,
+  targetIp: string,
+  isBlocked: boolean
+): Promise<{ success: boolean; message: string }> {
+  const normalizedUrl = normalizeAppsScriptUrl(data2Url);
+  if (!normalizedUrl || !targetIp) {
+    return { success: false, message: 'Chưa có cấu hình URL Google Sheets data2 hoặc địa chỉ IP!' };
+  }
+
+  const clean = extractCleanIp(targetIp);
+  if (!clean) {
+    return { success: false, message: 'Địa chỉ IP không hợp lệ!' };
+  }
+
+  const statusVal = isBlocked ? 'Chặn' : '';
+
+  const payload = {
+    action: 'updateIpBlock',
+    targetIp: clean,
+    cleanIp: clean,
+    formattedIp: clean,
+    isBlocked: isBlocked,
+    status: statusVal,
+    preventNewRow: true, // Bảo vệ: Tuyệt đối không cho phép tạo dòng học sinh mới
+    isUpdate: true,      // Tương thích ngược: Đảm bảo script cũ không rơi vào nhánh tạo học sinh mới
+    studentName: '',     // Không truyền tên học sinh
+  };
+
+  try {
+    let targetUrl = normalizedUrl;
+    try {
+      const u = new URL(normalizedUrl);
+      u.searchParams.set('action', 'updateIpBlock');
+      u.searchParams.set('targetIp', clean);
+      u.searchParams.set('isBlocked', String(isBlocked));
+      u.searchParams.set('status', statusVal);
+      u.searchParams.set('preventNewRow', 'true');
+      u.searchParams.set('isUpdate', 'true');
+      targetUrl = u.toString();
+    } catch {}
+
+    await fetch(targetUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    return {
+      success: true,
+      message: isBlocked
+        ? `Đã ghi trạng thái "Chặn" vào Cột J (Trạng thái) cho IP ${clean} trên Google Sheets data2!`
+        : `Đã mở chặn cho IP ${clean} (xóa trạng thái ở Cột J) trên Google Sheets data2!`,
+    };
+  } catch (err) {
+    console.warn('Lỗi khi gửi cập nhật chặn IP lên Google Sheets data2:', err);
+    return {
+      success: false,
+      message: 'Không thể kết nối đến Google Sheets data2.',
     };
   }
 }
@@ -657,6 +730,28 @@ export async function fetchSubmissionsFromData2(data2Url: string): Promise<Submi
           item['IP'] ??
           '';
         const parsedIp = typeof rawIp === 'string' ? rawIp.trim() : String(rawIp || '').trim();
+        const cleanIp = extractCleanIp(parsedIp);
+
+        const rawStatus =
+          item.status ??
+          item['Trạng thái'] ??
+          item['trạng thái'] ??
+          item['Trang thai'] ??
+          item['trang thai'] ??
+          item['Cột J'] ??
+          item['cột J'] ??
+          item['Cột 10'] ??
+          item['cột 10'] ??
+          item.statusCol ??
+          (Array.isArray(item) ? item[9] : undefined) ??
+          '';
+        const parsedStatus = typeof rawStatus === 'string' ? rawStatus.trim() : String(rawStatus || '').trim();
+        const isBlockedRow = Boolean(
+          item.isBlocked === true ||
+          /ch[aặ]n|block/i.test(parsedStatus) ||
+          hasBlockMarker(parsedIp)
+        );
+
         return {
           stt: item.stt || index + 1,
           studentName: String(item.studentName ?? 'Học sinh'),
@@ -667,7 +762,9 @@ export async function fetchSubmissionsFromData2(data2Url: string): Promise<Submi
           startTime: formatExamDateTime(item.startTime || (item.totalDuration?.includes('T') ? item.totalDuration : '')),
           endTime: formatExamDateTime(item.endTime),
           totalDuration: formatExamDuration(item.totalDuration, item.startTime, item.endTime),
-          ipAddress: parsedIp,
+          ipAddress: cleanIp || parsedIp,
+          status: parsedStatus || (isBlockedRow ? 'Chặn' : ''),
+          isBlocked: isBlockedRow,
           timestamp: Date.now() - (json.data.length - index) * 60000,
           syncedToData2: true,
           questionResults: [],
@@ -678,6 +775,31 @@ export async function fetchSubmissionsFromData2(data2Url: string): Promise<Submi
   } catch (err) {
     console.warn('Không thể tải dữ liệu bảng xếp hạng từ data2:', err);
     return [];
+  }
+}
+
+/**
+ * Kiểm tra trực tiếp tức thời với Google Sheet data2 xem địa chỉ IP này có đang bị Chặn hay không
+ * Đảm bảo chặn ngay lập tức kể cả khi học sinh vừa mở trang và dữ liệu chưa kịp đồng bộ xong
+ */
+export async function checkLiveIpBlockedOnSheet(
+  data2Url: string,
+  targetIp: string
+): Promise<{ isBlocked: boolean; blockedList: string[] }> {
+  if (!data2Url || !data2Url.trim() || !targetIp) {
+    return { isBlocked: false, blockedList: [] };
+  }
+  const cleanTarget = extractCleanIp(targetIp);
+  if (!cleanTarget) return { isBlocked: false, blockedList: [] };
+
+  try {
+    const list = await fetchSubmissionsFromData2(data2Url);
+    const blockedList = extractBlockedIpsFromSubmissions(list);
+    const isBlocked = blockedList.some((b) => extractCleanIp(b) === cleanTarget);
+    return { isBlocked, blockedList };
+  } catch (err) {
+    console.warn('Lỗi kiểm tra trạng thái chặn trực tiếp trên Sheet:', err);
+    return { isBlocked: false, blockedList: [] };
   }
 }
 

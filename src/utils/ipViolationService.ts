@@ -124,23 +124,60 @@ export function detectIpViolations(submissions: SubmissionRecord[]): IpViolation
 }
 
 /**
- * Trích xuất địa chỉ IP thuần (loại bỏ hậu tố "- Block", "- Blocked", khoảng trắng...)
- * Ví dụ: "113.169.89.135 - Block" -> "113.169.89.135"
+ * Kiểm tra xem chuỗi IP hoặc trạng thái có chứa dấu hiệu chặn (Block hoặc Chặn) hay không
+ */
+export function hasBlockMarker(ipStr: string | null | undefined): boolean {
+  if (!ipStr) return false;
+  return /\bblock(ed)?\b|ch[aặ]n/i.test(String(ipStr));
+}
+
+/**
+ * Trích xuất địa chỉ IP thuần (loại bỏ hoàn toàn tiền tố/hậu tố Block, dấu gạch nối thừa...)
+ * Ví dụ: "113.169.89.135 - Block", "113.169.89.135 -", "Block - 113.169.89.135" -> "113.169.89.135"
  */
 export function extractCleanIp(ipStr: string | null | undefined): string {
   if (!ipStr) return '';
   let ip = String(ipStr).trim();
-  ip = ip.replace(/\s*-\s*block(ed)?\b/gi, '');
+  // Loại bỏ tiền tố: "Block - 113.169...", "Block: 113.169...", "Block 113.169..."
+  ip = ip.replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, '');
+  // Loại bỏ hậu tố: "... - Block", "...: Block", "... Block"
+  ip = ip.replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, '');
+  // Loại bỏ các ký tự dấu gạch nối, hai chấm thừa ở đầu hoặc cuối nếu có
+  ip = ip.replace(/^[-:_,\s]+|[-:_,\s]+$/g, '').trim();
   return normalizeIpAddress(ip);
 }
 
 /**
- * Định dạng địa chỉ IP kèm hậu tố "- Block"
- * Ví dụ: "113.169.89.135" -> "113.169.89.135 - Block"
+ * Định dạng địa chỉ IP chuẩn để lưu trữ (Lưu IP thuần không gắn đuôi, trạng thái ghi sang Cột J)
  */
-export function formatBlockedIpString(ip: string): string {
+export function formatBlockedIpString(ip: string, _style: 'suffix' | 'prefix' = 'suffix'): string {
   const clean = extractCleanIp(ip);
-  return clean ? `${clean} - Block` : '';
+  return clean || '';
+}
+
+/**
+ * Trích xuất toàn bộ danh sách các IP bị chặn từ mảng kết quả bài nộp của Google Sheet data2
+ * (Nhận diện qua Cột J - Trạng thái: "Chặn" HOẶC Cột I còn chứa dấu hiệu Block cũ để tương thích ngược)
+ */
+export function extractBlockedIpsFromSubmissions(
+  submissions: { ipAddress?: string; status?: string; isBlocked?: boolean }[]
+): string[] {
+  if (!Array.isArray(submissions) || submissions.length === 0) return [];
+  const blockedMap = new Map<string, string>();
+  for (const s of submissions) {
+    const rawIp = String(s.ipAddress || '').trim();
+    const rawStatus = String(s.status || '').trim();
+    const isStatusBlocked = hasBlockMarker(rawStatus) || s.isBlocked === true;
+    const isIpBlocked = hasBlockMarker(rawIp);
+
+    if (isStatusBlocked || isIpBlocked) {
+      const clean = extractCleanIp(rawIp);
+      if (clean) {
+        blockedMap.set(clean, clean);
+      }
+    }
+  }
+  return Array.from(blockedMap.values());
 }
 
 /**
@@ -180,7 +217,7 @@ export function isValidIpFormat(ip: string): boolean {
 }
 
 /**
- * Thêm một địa chỉ IP vào danh sách chặn thủ công (tự động gắn hậu tố "- Block")
+ * Thêm một địa chỉ IP vào danh sách chặn thủ công (lưu IP thuần, trạng thái "Chặn" ghi vào Cột J)
  */
 export function addIpToBlockedList(
   newIp: string,
@@ -203,13 +240,12 @@ export function addIpToBlockedList(
     };
   }
 
-  const formatted = formatBlockedIpString(clean);
-  const nextList = [...currentList, formatted];
+  const nextList = [...currentList, clean];
   return {
     success: true,
     list: nextList,
-    message: `Đã chặn thành công IP: ${formatted}`,
-    formattedIp: formatted,
+    message: `Đã thêm IP ${clean} vào danh sách chặn (Trạng thái: Chặn)!`,
+    formattedIp: clean,
   };
 }
 

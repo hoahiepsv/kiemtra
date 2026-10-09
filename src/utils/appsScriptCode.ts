@@ -274,6 +274,87 @@ function doPost(e) {
       }
     }
 
+    var action = String(data.action || (e && e.parameter && e.parameter.action) || "").trim();
+
+    // =========================================================================
+    // =========================================================================
+    // XỬ LÝ CẬP NHẬT CHẶN / MỞ CHẶN IP TRÊN CỘT J (TRẠNG THÁI) CỦA SHEET DATA2
+    // Cột I giữ nguyên IP thuần, Cột J ghi "Chặn" khi chặn (hoặc xóa rỗng khi mở chặn)
+    // =========================================================================
+    if (action === "updateIpBlock" || action === "blockIp" || action === "unblockIp") {
+      var rawTargetIp = String(data.targetIp || data.cleanIp || (e && e.parameter && (e.parameter.targetIp || e.parameter.ip)) || "").trim();
+      var cleanTarget = rawTargetIp.replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+      if (cleanTarget.indexOf(",") !== -1) cleanTarget = cleanTarget.split(",")[0].replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+      cleanTarget = cleanTarget.replace(/^[-:_,\s]+|[-:_,\s]+$/g, "").replace(/\s+/g, "").trim();
+
+      var isBlockedParam = data.isBlocked === true || String(data.isBlocked) === "true" || (e && e.parameter && e.parameter.isBlocked === "true") || action === "blockIp";
+      var statusValue = isBlockedParam ? "Chặn" : "";
+
+      var lastRow = sheet.getLastRow();
+      var lastCol = Math.max(sheet.getLastColumn(), 10);
+      var ipColIdx = 8; // Mặc định Cột I (chỉ số 8, cột 9) là IP học sinh
+      var statusColIdx = 9; // Mặc định Cột J (chỉ số 9, cột 10) là Trạng thái
+      if (lastRow >= 1) {
+        var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0] || [];
+        for (var h = 0; h < headers.length; h++) {
+          var hText = removeAccents(String(headers[h] || "")).toLowerCase();
+          if (hText.indexOf("ip") !== -1 || hText.indexOf("cot 9") !== -1 || hText.indexOf("cot i") !== -1) {
+            ipColIdx = h;
+          } else if (hText.indexOf("trang thai") !== -1 || hText.indexOf("status") !== -1 || hText.indexOf("cot 10") !== -1 || hText.indexOf("cot j") !== -1) {
+            statusColIdx = h;
+          }
+        }
+        if (statusColIdx === ipColIdx) {
+          statusColIdx = ipColIdx + 1;
+        }
+
+        // Tự động thêm tiêu đề "Trạng thái" nếu Cột J chưa có tiêu đề
+        var statusHeaderVal = String(headers[statusColIdx] || "").trim();
+        if (!statusHeaderVal) {
+          sheet.getRange(1, statusColIdx + 1).setValue("Trạng thái");
+        }
+      }
+
+      var updatedCount = 0;
+      if (lastRow >= 2 && cleanTarget) {
+        var numRows = lastRow - 1;
+        var ipRange = sheet.getRange(2, ipColIdx + 1, numRows, 1);
+        var statusRange = sheet.getRange(2, statusColIdx + 1, numRows, 1);
+        var ipValues = ipRange.getValues();
+        var statusValues = statusRange.getValues();
+
+        for (var r = 0; r < ipValues.length; r++) {
+          var currentVal = String(ipValues[r][0] || "").trim();
+          var currentClean = currentVal.replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+          if (currentVal.indexOf(",") !== -1) currentClean = currentVal.split(",")[0].replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+          currentClean = currentClean.replace(/^[-:_,\s]+|[-:_,\s]+$/g, "").replace(/\s+/g, "").trim();
+
+          if (currentClean && currentClean === cleanTarget) {
+            // Giữ IP thuần sạch tại Cột I, xóa mọi - Block cũ nếu có
+            ipValues[r][0] = cleanTarget;
+            // Ghi trạng thái "Chặn" hoặc rỗng "" vào Cột J (Trạng thái)
+            statusValues[r][0] = statusValue;
+            updatedCount++;
+          }
+        }
+        if (updatedCount > 0) {
+          ipRange.setValues(ipValues);
+          statusRange.setValues(statusValues);
+          SpreadsheetApp.flush();
+        }
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        action: "updateIpBlock",
+        targetIp: cleanTarget,
+        isBlocked: isBlockedParam,
+        statusValue: statusValue,
+        updatedRows: updatedCount,
+        message: "Đã cập nhật trạng thái " + (isBlockedParam ? "CHẶN vào Cột J (Trạng thái)" : "MỞ CHẶN (xóa Cột J)") + " cho IP " + cleanTarget + " trên Google Sheet data2!"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     var isUpdate = (
       data.action === "update" ||
       data.action === "edit" ||
@@ -293,7 +374,7 @@ function doPost(e) {
     var clientIp = data.ip || data.ipAddress || data.clientIp || data.ipHocSinh || "";
 
     var lastRow = sheet.getLastRow();
-    var lastCol = Math.max(sheet.getLastColumn(), 9);
+    var lastCol = Math.max(sheet.getLastColumn(), 10);
 
     // 1. Tự động nhận diện cột từ dòng tiêu đề (Dòng 1)
     var headers = lastRow >= 1 ? (sheet.getRange(1, 1, 1, lastCol).getValues()[0] || []) : [];
@@ -303,6 +384,7 @@ function doPost(e) {
     var scoreColIdx = 3;      // Mặc định Cột D (3)
     var detailColIdx = 4;     // Mặc định Cột E (4)
     var ipColIdx = 8;         // Mặc định Cột I (8)
+    var statusColIdx = 9;     // Mặc định Cột J (9) - Trạng thái
 
     for (var h = 0; h < headers.length; h++) {
       var hText = removeAccents(String(headers[h] || ""));
@@ -311,7 +393,11 @@ function doPost(e) {
       else if (hText.indexOf("lop") !== -1 || hText.indexOf("class") !== -1) classColIdx = h;
       else if (hText.indexOf("tong diem") !== -1 || hText === "diem" || hText.indexOf("score") !== -1) scoreColIdx = h;
       else if (hText.indexOf("diem tung cau") !== -1 || hText.indexOf("chi tiet") !== -1) detailColIdx = h;
-      else if (hText.indexOf("ip") !== -1 || hText.indexOf("cot 9") !== -1) ipColIdx = h;
+      else if (hText.indexOf("ip") !== -1 || hText.indexOf("cot 9") !== -1 || hText.indexOf("cot i") !== -1) ipColIdx = h;
+      else if (hText.indexOf("trang thai") !== -1 || hText.indexOf("status") !== -1 || hText.indexOf("cot 10") !== -1 || hText.indexOf("cot j") !== -1) statusColIdx = h;
+    }
+    if (statusColIdx === ipColIdx) {
+      statusColIdx = ipColIdx + 1;
     }
 
     // Nhận diện các cột từng câu hỏi trong datasheet (VD: "Câu 1", "Câu 2", "C1", "C2", "Q1",...)
@@ -319,7 +405,7 @@ function doPost(e) {
     for (var h = 0; h < headers.length; h++) {
       var rawH = String(headers[h] || "").trim();
       var cleanH = removeAccents(rawH).toLowerCase();
-      if (h === sttColIdx || h === nameColIdx || h === classColIdx || h === scoreColIdx || h === ipColIdx) {
+      if (h === sttColIdx || h === nameColIdx || h === classColIdx || h === scoreColIdx || h === ipColIdx || h === statusColIdx) {
         continue;
       }
       var qMatch = cleanH.match(/^(?:cau|c|q)\s*(\d+)$/i);
@@ -336,6 +422,14 @@ function doPost(e) {
     // LUÔN LUÔN THÊM DÒNG MỚI VÀO CUỐI BẢNG ĐỂ TRÁNH NHẦM LẪN HỌC SINH!
     // =========================================================================
     if (!isUpdate) {
+      // Bảo vệ: Tuyệt đối không thêm dòng mới nếu không có tên học sinh nộp bài hoặc có yêu cầu preventNewRow
+      if (data.preventNewRow === true || String(data.preventNewRow) === "true" || (!data.studentName && !data.name)) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "ignored",
+          message: "Đã bỏ qua thao tác thêm dòng do không có thông tin học sinh nộp bài hoặc có cờ bảo vệ!"
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+
       var nextRow = Math.max(lastRow + 1, 2);
       var nextSTT = 1;
 
@@ -349,7 +443,12 @@ function doPost(e) {
         }
       }
 
-      var newRowData = new Array(Math.max(lastCol, 9));
+      // Đảm bảo dòng tiêu đề có cột Trạng thái nếu chưa có
+      if (headers.length <= statusColIdx || !headers[statusColIdx]) {
+        sheet.getRange(1, statusColIdx + 1).setValue("Trạng thái");
+      }
+
+      var newRowData = new Array(Math.max(lastCol, 10));
       for (var k = 0; k < newRowData.length; k++) newRowData[k] = "";
       newRowData[sttColIdx] = nextSTT;
       newRowData[nameColIdx] = studentName;
@@ -360,6 +459,7 @@ function doPost(e) {
       newRowData[6] = endTime;
       newRowData[7] = totalDuration;
       newRowData[ipColIdx] = clientIp;
+      newRowData[statusColIdx] = data.status || (data.isBlocked ? "Chặn" : "");
 
       // Điền điểm từng câu vào các cột câu tương ứng
       if (data.questionScores && typeof data.questionScores === "object") {
@@ -554,32 +654,48 @@ function doGet(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName("data2") || ss.getActiveSheet();
     var lastRow = sheet.getLastRow();
-    var lastCol = Math.max(sheet.getLastColumn(), 9);
+    var lastCol = Math.max(sheet.getLastColumn(), 10);
     
     var submissions = [];
     if (lastRow >= 2) {
       var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0] || [];
-      // Cột 9 trong sheet data2 là IP học sinh
-      var ipColIdx = 8; // Mặc định cột 9 (chỉ số 8)
+      // Cột 9 trong sheet data2 là IP học sinh, Cột 10 là Trạng thái (Chặn / rỗng)
+      var ipColIdx = 8; // Mặc định Cột I (chỉ số 8, cột 9)
+      var statusColIdx = 9; // Mặc định Cột J (chỉ số 9, cột 10)
       for (var h = 0; h < headers.length; h++) {
-        var hName = (headers[h] || "").toString().toLowerCase();
-        if (hName.indexOf("ip") !== -1 || hName.indexOf("cột 9") !== -1 || hName.indexOf("cot 9") !== -1) {
+        var hName = removeAccents((headers[h] || "").toString()).toLowerCase();
+        if (hName.indexOf("ip") !== -1 || hName.indexOf("cot 9") !== -1 || hName.indexOf("cot i") !== -1) {
           ipColIdx = h;
-          break;
+        } else if (hName.indexOf("trang thai") !== -1 || hName.indexOf("status") !== -1 || hName.indexOf("cot 10") !== -1 || hName.indexOf("cot j") !== -1) {
+          statusColIdx = h;
         }
+      }
+      if (statusColIdx === ipColIdx) {
+        statusColIdx = ipColIdx + 1;
       }
 
       var data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
       for (var i = 0; i < data.length; i++) {
         var row = data[i];
         if (!row[1]) continue; // Bỏ qua dòng trống tên học sinh
-        // Lấy IP học sinh từ cột 9 trong sheet data2
+
+        // Lấy IP học sinh từ cột IP trong sheet data2
         var rawIp = "";
-        if (row[8] !== undefined && row[8] !== null && String(row[8]).trim() !== "") {
-          rawIp = String(row[8]).trim();
-        } else if (row[ipColIdx] !== undefined && row[ipColIdx] !== null) {
+        if (row[ipColIdx] !== undefined && row[ipColIdx] !== null) {
           rawIp = String(row[ipColIdx]).trim();
+        } else if (row[8] !== undefined && row[8] !== null) {
+          rawIp = String(row[8]).trim();
         }
+
+        var cleanIp = rawIp.replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+        if (rawIp.indexOf(",") !== -1) cleanIp = rawIp.split(",")[0].replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+        cleanIp = cleanIp.replace(/^[-:_,\s]+|[-:_,\s]+$/g, "").replace(/\s+/g, "").trim();
+
+        // Lấy Trạng thái từ Cột J (Trạng thái)
+        var rawStatus = (row[statusColIdx] !== undefined && row[statusColIdx] !== null) ? String(row[statusColIdx]).trim() : "";
+        var cleanStatusLower = removeAccents(rawStatus).toLowerCase();
+        var isBlockedRow = cleanStatusLower.indexOf("chan") !== -1 || cleanStatusLower.indexOf("block") !== -1 || /\bblock(ed)?\b/i.test(rawIp);
+
         submissions.push({
           stt: row[0] || (i + 1),
           studentName: row[1],
@@ -589,7 +705,9 @@ function doGet(e) {
           startTime: row[5] || "",
           endTime: row[6] || "",
           totalDuration: row[7] || "",
-          ipAddress: rawIp
+          ipAddress: cleanIp || rawIp,
+          status: rawStatus || (isBlockedRow ? "Chặn" : ""),
+          isBlocked: isBlockedRow
         });
       }
     }
@@ -901,18 +1019,23 @@ function doGet(e) {
     try {
       var sheet2 = ss.getSheetByName("data2") || ss.getActiveSheet();
       var lastRow2 = sheet2.getLastRow();
-      var lastCol2 = Math.max(sheet2.getLastColumn(), 9);
+      var lastCol2 = Math.max(sheet2.getLastColumn(), 10);
       var submissions = [];
 
       if (lastRow2 >= 2) {
-        var headers2 = sheet2.getRange(1, 1, 1, lastCol2).getValues()[0];
+        var headers2 = sheet2.getRange(1, 1, 1, lastCol2).getValues()[0] || [];
         var ipIdx2 = 8; // Mặc định Cột I (chỉ số 8) là IP học sinh
+        var statusIdx2 = 9; // Mặc định Cột J (chỉ số 9) là Trạng thái
         for (var h2 = 0; h2 < headers2.length; h2++) {
           var hName2 = removeAccents(String(headers2[h2] || ""));
-          if (hName2.indexOf("ip") !== -1 || hName2.indexOf("cot 9") !== -1) {
+          if (hName2.indexOf("ip") !== -1 || hName2.indexOf("cot 9") !== -1 || hName2.indexOf("cot i") !== -1) {
             ipIdx2 = h2;
-            break;
+          } else if (hName2.indexOf("trang thai") !== -1 || hName2.indexOf("status") !== -1 || hName2.indexOf("cot 10") !== -1 || hName2.indexOf("cot j") !== -1) {
+            statusIdx2 = h2;
           }
+        }
+        if (statusIdx2 === ipIdx2) {
+          statusIdx2 = ipIdx2 + 1;
         }
 
         var allRows2 = sheet2.getRange(2, 1, lastRow2 - 1, lastCol2).getValues();
@@ -922,11 +1045,19 @@ function doGet(e) {
           if (!studentName) continue;
 
           var rawIp = "";
-          if (rowData[8] !== undefined && rowData[8] !== null && String(rowData[8]).trim() !== "") {
-            rawIp = String(rowData[8]).trim();
-          } else if (rowData[ipIdx2] !== undefined && rowData[ipIdx2] !== null) {
+          if (rowData[ipIdx2] !== undefined && rowData[ipIdx2] !== null) {
             rawIp = String(rowData[ipIdx2]).trim();
+          } else if (rowData[8] !== undefined && rowData[8] !== null) {
+            rawIp = String(rowData[8]).trim();
           }
+
+          var cleanIp = rawIp.replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+          if (rawIp.indexOf(",") !== -1) cleanIp = rawIp.split(",")[0].replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+          cleanIp = cleanIp.replace(/^[-:_,\s]+|[-:_,\s]+$/g, "").replace(/\s+/g, "").trim();
+
+          var rawStatus = (rowData[statusIdx2] !== undefined && rowData[statusIdx2] !== null) ? String(rowData[statusIdx2]).trim() : "";
+          var cleanStatusLower = removeAccents(rawStatus).toLowerCase();
+          var isBlockedRow = cleanStatusLower.indexOf("chan") !== -1 || cleanStatusLower.indexOf("block") !== -1 || /\bblock(ed)?\b/i.test(rawIp);
 
           submissions.push({
             stt: rowData[0],
@@ -937,7 +1068,9 @@ function doGet(e) {
             startTime: String(rowData[5] || ""),
             endTime: String(rowData[6] || ""),
             totalDuration: String(rowData[7] || ""),
-            ipAddress: rawIp
+            ipAddress: cleanIp || rawIp,
+            status: rawStatus || (isBlockedRow ? "Chặn" : ""),
+            isBlocked: isBlockedRow
           });
         }
       }
@@ -1119,9 +1252,85 @@ function doPost(e) {
     }
 
     // -----------------------------------------------------------------------
-    // NHÁNH 2: LƯU KẾT QUẢ NỘP BÀI HOẶC CẬP NHẬT ĐIỂM SỐ VÀO SHEET DATA2
+    // NHÁNH 2: LƯU KẾT QUẢ NỘP BÀI, CHẶN IP HOẶC CẬP NHẬT ĐIỂM SỐ VÀO SHEET DATA2
     // -----------------------------------------------------------------------
     var sheet2 = ss.getSheetByName("data2") || ss.getActiveSheet();
+
+    // 2.0. XỬ LÝ CẬP NHẬT CHẶN / MỞ CHẶN IP TRÊN CỘT J (TRẠNG THÁI) CỦA SHEET DATA2
+    var action = String(data.action || (e && e.parameter && e.parameter.action) || "").trim();
+    if (action === "updateIpBlock" || action === "blockIp" || action === "unblockIp") {
+      var rawTargetIp = String(data.targetIp || data.cleanIp || (e && e.parameter && (e.parameter.targetIp || e.parameter.ip)) || "").trim();
+      var cleanTarget = rawTargetIp.replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+      if (cleanTarget.indexOf(",") !== -1) cleanTarget = cleanTarget.split(",")[0].replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+      cleanTarget = cleanTarget.replace(/^[-:_,\s]+|[-:_,\s]+$/g, "").replace(/\s+/g, "").trim();
+
+      var isBlockedParam = data.isBlocked === true || String(data.isBlocked) === "true" || (e && e.parameter && e.parameter.isBlocked === "true") || action === "blockIp";
+      var statusValue = isBlockedParam ? "Chặn" : "";
+
+      var lastRow2 = sheet2.getLastRow();
+      var lastCol2 = Math.max(sheet2.getLastColumn(), 10);
+      var ipColIdx = 8; // Mặc định Cột I (chỉ số 8, cột 9) là IP học sinh
+      var statusColIdx = 9; // Mặc định Cột J (chỉ số 9, cột 10) là Trạng thái
+      if (lastRow2 >= 1) {
+        var headers2 = sheet2.getRange(1, 1, 1, lastCol2).getValues()[0] || [];
+        for (var h = 0; h < headers2.length; h++) {
+          var hText = removeAccents(String(headers2[h] || "")).toLowerCase();
+          if (hText.indexOf("ip") !== -1 || hText.indexOf("cot 9") !== -1 || hText.indexOf("cot i") !== -1) {
+            ipColIdx = h;
+          } else if (hText.indexOf("trang thai") !== -1 || hText.indexOf("status") !== -1 || hText.indexOf("cot 10") !== -1 || hText.indexOf("cot j") !== -1) {
+            statusColIdx = h;
+          }
+        }
+        if (statusColIdx === ipColIdx) {
+          statusColIdx = ipColIdx + 1;
+        }
+
+        // Tự động thêm tiêu đề "Trạng thái" nếu Cột J chưa có tiêu đề
+        var statusHeaderVal = String(headers2[statusColIdx] || "").trim();
+        if (!statusHeaderVal) {
+          sheet2.getRange(1, statusColIdx + 1).setValue("Trạng thái");
+        }
+      }
+
+      var updatedCount = 0;
+      if (lastRow2 >= 2 && cleanTarget) {
+        var numRows2 = lastRow2 - 1;
+        var ipRange2 = sheet2.getRange(2, ipColIdx + 1, numRows2, 1);
+        var statusRange2 = sheet2.getRange(2, statusColIdx + 1, numRows2, 1);
+        var ipValues = ipRange2.getValues();
+        var statusValues = statusRange2.getValues();
+
+        for (var r = 0; r < ipValues.length; r++) {
+          var currentVal = String(ipValues[r][0] || "").trim();
+          var currentClean = currentVal.replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+          if (currentVal.indexOf(",") !== -1) currentClean = currentVal.split(",")[0].replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, "").replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, "");
+          currentClean = currentClean.replace(/^[-:_,\s]+|[-:_,\s]+$/g, "").replace(/\s+/g, "").trim();
+
+          if (currentClean && currentClean === cleanTarget) {
+            // Giữ IP thuần sạch tại Cột I
+            ipValues[r][0] = cleanTarget;
+            // Ghi trạng thái "Chặn" hoặc rỗng "" vào Cột J (Trạng thái)
+            statusValues[r][0] = statusValue;
+            updatedCount++;
+          }
+        }
+        if (updatedCount > 0) {
+          ipRange2.setValues(ipValues);
+          statusRange2.setValues(statusValues);
+          SpreadsheetApp.flush();
+        }
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        action: "updateIpBlock",
+        targetIp: cleanTarget,
+        isBlocked: isBlockedParam,
+        statusValue: statusValue,
+        updatedRows: updatedCount,
+        message: "Đã cập nhật trạng thái " + (isBlockedParam ? "CHẶN vào Cột J (Trạng thái)" : "MỞ CHẶN (xóa Cột J)") + " cho IP " + cleanTarget + " trên sheet data2!"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
 
     var isUpdate = (
       data.action === "update" ||
@@ -1142,7 +1351,7 @@ function doPost(e) {
     var clientIp = String(data.ip || data.ipAddress || data.clientIp || data.ipHocSinh || "");
 
     var lastRow2 = sheet2.getLastRow();
-    var lastCol2 = Math.max(sheet2.getLastColumn(), 9);
+    var lastCol2 = Math.max(sheet2.getLastColumn(), 10);
 
     // 1. Nhận diện các cột tiêu chuẩn từ Dòng 1
     var headers2 = lastRow2 >= 1 ? (sheet2.getRange(1, 1, 1, lastCol2).getValues()[0] || []) : [];
@@ -1152,6 +1361,7 @@ function doPost(e) {
     var scoreColIdx = 3;  // Mặc định Cột D (3)
     var detailColIdx = 4; // Mặc định Cột E (4)
     var ipColIdx = 8;     // Mặc định Cột I (8)
+    var statusColIdx = 9; // Mặc định Cột J (9) - Trạng thái
 
     for (var h = 0; h < headers2.length; h++) {
       var hText = removeAccents(String(headers2[h] || ""));
@@ -1160,7 +1370,11 @@ function doPost(e) {
       else if (hText.indexOf("lop") !== -1 || hText.indexOf("class") !== -1) classColIdx = h;
       else if (hText.indexOf("tong diem") !== -1 || hText === "diem" || hText.indexOf("score") !== -1) scoreColIdx = h;
       else if (hText.indexOf("diem tung cau") !== -1 || hText.indexOf("chi tiet") !== -1) detailColIdx = h;
-      else if (hText.indexOf("ip") !== -1 || hText.indexOf("cot 9") !== -1) ipColIdx = h;
+      else if (hText.indexOf("ip") !== -1 || hText.indexOf("cot 9") !== -1 || hText.indexOf("cot i") !== -1) ipColIdx = h;
+      else if (hText.indexOf("trang thai") !== -1 || hText.indexOf("status") !== -1 || hText.indexOf("cot 10") !== -1 || hText.indexOf("cot j") !== -1) statusColIdx = h;
+    }
+    if (statusColIdx === ipColIdx) {
+      statusColIdx = ipColIdx + 1;
     }
 
     // 2. Nhận diện các cột từng câu hỏi trong datasheet (VD: "Câu 1", "Câu 2", "C1", "C2", "Q1",...)
@@ -1168,13 +1382,13 @@ function doPost(e) {
     for (var qCol = 0; qCol < headers2.length; qCol++) {
       var rawHead = String(headers2[qCol] || "").trim();
       var cleanHead = removeAccents(rawHead).toLowerCase();
-      if (qCol === sttColIdx || qCol === nameColIdx || qCol === classColIdx || qCol === scoreColIdx || qCol === ipColIdx) {
+      if (qCol === sttColIdx || qCol === nameColIdx || qCol === classColIdx || qCol === scoreColIdx || qCol === ipColIdx || qCol === statusColIdx) {
         continue;
       }
-      var qMatch = cleanHead.match(/^(?:cau|c|q)\\s*(\\d+)$/i);
+      var qMatch = cleanHead.match(/^(?:cau|c|q)\s*(\d+)$/i);
       if (qMatch) {
         questionCols[parseInt(qMatch[1], 10)] = qCol;
-      } else if (/^\\d+$/.test(cleanHead) && qCol >= 3) {
+      } else if (/^\d+$/.test(cleanHead) && qCol >= 3) {
         questionCols[parseInt(cleanHead, 10)] = qCol;
       }
     }
@@ -1185,6 +1399,14 @@ function doPost(e) {
     // LUÔN LUÔN THÊM DÒNG MỚI VÀO CUỐI BẢNG ĐỂ TRÁNH NHẦM LẪN HỌC SINH!
     // =========================================================================
     if (!isUpdate) {
+      // Bảo vệ: Tuyệt đối không thêm dòng mới nếu không có tên học sinh nộp bài hoặc có yêu cầu preventNewRow
+      if (data.preventNewRow === true || String(data.preventNewRow) === "true" || (!data.studentName && !data.name)) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "ignored",
+          message: "Đã bỏ qua thao tác thêm dòng do không có thông tin học sinh nộp bài hoặc có cờ bảo vệ!"
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+
       var nextRow = Math.max(lastRow2 + 1, 2);
       var nextSTT = 1;
       if (lastRow2 >= 2) {
@@ -1192,7 +1414,12 @@ function doPost(e) {
         nextSTT = (!isNaN(prevSTT) && prevSTT > 0) ? prevSTT + 1 : lastRow2;
       }
 
-      var newRowData = new Array(Math.max(lastCol2, 9));
+      // Đảm bảo dòng tiêu đề có cột Trạng thái nếu chưa có
+      if (headers2.length <= statusColIdx || !headers2[statusColIdx]) {
+        sheet2.getRange(1, statusColIdx + 1).setValue("Trạng thái");
+      }
+
+      var newRowData = new Array(Math.max(lastCol2, 10));
       for (var k = 0; k < newRowData.length; k++) newRowData[k] = "";
       newRowData[sttColIdx] = nextSTT;
       newRowData[nameColIdx] = studentName;
@@ -1203,6 +1430,7 @@ function doPost(e) {
       newRowData[6] = endTime;
       newRowData[7] = totalDuration;
       newRowData[ipColIdx] = clientIp;
+      newRowData[statusColIdx] = data.status || (data.isBlocked ? "Chặn" : "");
 
       // Điền điểm từng câu vào các cột câu tương ứng nếu datasheet có cột câu
       if (data.questionScores && typeof data.questionScores === "object") {
