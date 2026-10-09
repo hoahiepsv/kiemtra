@@ -4,6 +4,7 @@ import { ExamConfig, DraftExam, Question } from '../types';
 import { fetchClientIp } from '../utils/ipService';
 import { formatStudentName, formatClassName } from '../utils/studentFormatting';
 import { isIpBlockedCheck } from '../utils/ipViolationService';
+import { checkLiveIpBlockedOnSheet } from '../utils/syncService';
 
 interface StudentStartFormProps {
   config: ExamConfig;
@@ -16,6 +17,7 @@ interface StudentStartFormProps {
   onResumeDraft: () => void;
   onDiscardDraft: () => void;
   onAuthorClick?: () => void;
+  onUpdateBlockedIps?: (blockedIps: string[]) => void;
 }
 
 export const StudentStartForm: React.FC<StudentStartFormProps> = ({
@@ -29,6 +31,7 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
   onResumeDraft,
   onDiscardDraft,
   onAuthorClick,
+  onUpdateBlockedIps,
 }) => {
   const calculatedMcCount =
     mcCount !== undefined
@@ -50,6 +53,7 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [clientIp, setClientIp] = useState<string>('');
   const [isLoadingIp, setIsLoadingIp] = useState<boolean>(true);
+  const [isCheckingSecurity, setIsCheckingSecurity] = useState<boolean>(false);
 
   // Tra soát tức thời trong RAM (< 0.0001s) xem IP thiết bị này có bị Giáo viên chặn hay không
   const isDeviceBlocked = useMemo(() => {
@@ -69,16 +73,8 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
     };
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Chặn ngay lập tức nếu thiết bị nằm trong danh sách đen
-    if (isDeviceBlocked) {
-      setErrorMessage(
-        `⛔ Thiết bị của bạn (IP: ${clientIp} - Block) đã bị Giáo viên khóa thủ công. Vui lòng liên hệ Giáo viên bộ môn để được mở khóa!`
-      );
-      return;
-    }
 
     const cleanName = formatStudentName(studentName);
     const cleanClass = formatClassName(className);
@@ -95,6 +91,49 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
       setErrorMessage('Đề thi hiện chưa có câu hỏi. Giáo viên vui lòng vào mục Quản trị để đồng bộ đề thi từ Google Sheets (data1) hoặc tạo câu hỏi!');
       return;
     }
+
+    setIsCheckingSecurity(true);
+    setErrorMessage('');
+
+    // 1. Xác thực địa chỉ IP thiết bị (nếu IP chưa tải xong thì đợi tải)
+    let currentCheckIp = clientIp;
+    if (!currentCheckIp) {
+      try {
+        currentCheckIp = await fetchClientIp();
+        if (currentCheckIp) setClientIp(currentCheckIp);
+      } catch {}
+    }
+
+    // 2. Chặn ngay lập tức nếu thiết bị nằm trong danh sách đen trong RAM
+    if (isDeviceBlocked || isIpBlockedCheck(currentCheckIp, config.blockedIps, config.enableIpBlocking ?? true)) {
+      setIsCheckingSecurity(false);
+      setErrorMessage(
+        `⛔ Thiết bị của bạn (IP: ${currentCheckIp || clientIp || 'IP'}) đã bị Giáo viên chặn vào phòng thi (Trạng thái: Chặn). Vui lòng liên hệ Giáo viên bộ môn để được mở khóa!`
+      );
+      return;
+    }
+
+    // 3. KIỂM TRA THỜI GIAN THỰC VỚI GOOGLE SHEET (DATA2):
+    // Đảm bảo chặn đứng trường hợp học sinh vừa mở web trước khi dữ liệu kịp tải ngầm xong
+    if (config.data2Url && config.enableIpBlocking !== false && currentCheckIp) {
+      try {
+        const liveCheck = await checkLiveIpBlockedOnSheet(config.data2Url, currentCheckIp);
+        if (liveCheck.isBlocked) {
+          if (onUpdateBlockedIps && liveCheck.blockedList.length > 0) {
+            onUpdateBlockedIps(liveCheck.blockedList);
+          }
+          setIsCheckingSecurity(false);
+          setErrorMessage(
+            `⛔ Thiết bị của bạn (IP: ${currentCheckIp}) đã bị Giáo viên chặn vào phòng thi (Trạng thái: Chặn trên Google Sheet). Vui lòng liên hệ Giáo viên bộ môn để được mở khóa!`
+          );
+          return;
+        }
+      } catch (err) {
+        console.warn('Live IP check warning:', err);
+      }
+    }
+
+    setIsCheckingSecurity(false);
     setStudentName(cleanName);
     setClassName(cleanClass);
     setErrorMessage('');
@@ -115,7 +154,7 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
                 Thiết bị bị tạm khóa kiểm tra
               </h4>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-rose-200 text-rose-900 border border-rose-400 font-mono shadow-2xs">
-                {clientIp || 'IP'} - Block
+                IP: {clientIp || 'IP'} [Chặn]
               </span>
             </div>
             <p className="text-xs text-rose-800 mt-1.5 leading-relaxed font-medium">
@@ -233,21 +272,28 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
             <h3 className="text-base font-bold text-slate-900 flex flex-wrap items-center gap-2">
               <span>Thông tin thí sinh tham gia</span>
               <span
-                className="text-xs font-mono font-normal px-2.5 py-0.5 rounded-md bg-sky-50 text-sky-800 border border-sky-200"
-                title="Địa chỉ IP thiết bị bạn đang sử dụng (dạng: 113.169.89.135, ...)"
+                className={`text-xs font-mono font-medium px-2.5 py-0.5 rounded-md border flex items-center gap-1.5 ${
+                  isDeviceBlocked
+                    ? 'bg-rose-50 text-rose-800 border-rose-300'
+                    : 'bg-sky-50 text-sky-800 border-sky-200'
+                }`}
+                title="Địa chỉ IP mạng thiết bị bạn đang sử dụng"
               >
-                IP của bạn: <strong>{isLoadingIp ? 'Đang nhận diện...' : (clientIp || '113.169.89.135')}</strong>
+                <Globe className="w-3.5 h-3.5 opacity-70" />
+                <span>Số báo danh: </span>
+                <strong>{isLoadingIp ? 'Đang nhận diện...' : (clientIp || 'Đang kết nối')}</strong>
+                {isDeviceBlocked && <span className="text-[10px] bg-rose-600 text-white px-1.5 py-0.2 rounded font-bold ml-1">ĐÃ CHẶN</span>}
               </span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Vui lòng điền chính xác Họ tên và Lớp
+              Vui lòng điền chính xác Họ tên và Lớp của học sinh
             </p>
           </div>
 
           {errorMessage && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{errorMessage}</span>
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-300 text-rose-800 text-xs flex items-start gap-2.5 shadow-2xs animate-in fade-in">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-600 mt-0.5" />
+              <span className="font-semibold leading-relaxed">{errorMessage}</span>
             </div>
           )}
 
@@ -307,17 +353,24 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
           <button
             id="btn-start-exam"
             type="submit"
-            disabled={isDeviceBlocked}
+            disabled={isDeviceBlocked || isCheckingSecurity}
             className={`w-full py-3.5 px-6 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-md active:scale-[0.99] transition-all cursor-pointer ${
               isDeviceBlocked
                 ? 'bg-rose-700 hover:bg-rose-800 text-white opacity-95 cursor-not-allowed shadow-rose-700/25'
+                : isCheckingSecurity
+                ? 'bg-sky-400 text-white cursor-wait'
                 : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-500/25'
             }`}
           >
-            {isDeviceBlocked ? (
+            {isCheckingSecurity ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Đang kiểm tra bảo mật thiết bị...</span>
+              </>
+            ) : isDeviceBlocked ? (
               <>
                 <ShieldAlert className="w-5 h-5" />
-                <span>THIẾT BỊ BỊ TẠM KHÓA (- BLOCK)</span>
+                <span>THIẾT BỊ BỊ TẠM KHÓA (CHẶN)</span>
               </>
             ) : (
               <>

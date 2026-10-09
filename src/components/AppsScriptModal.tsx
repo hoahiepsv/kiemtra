@@ -311,6 +311,23 @@ export const AppsScriptModal: React.FC<AppsScriptModalProps> = ({
                   {APPS_SCRIPT_COMBINED}
                 </pre>
               </div>
+
+              {/* Instructions steps */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                <h5 className="font-bold text-slate-800">Cách cài đặt & Cập nhật mã gộp All-In-One:</h5>
+                <ol className="list-decimal pl-5 space-y-1.5 text-slate-600">
+                  <li>Mở file Google Sheet chứa cả 2 tab trang tính: <strong>data1</strong> (đề thi) và <strong>data2</strong> (kết quả nộp bài).</li>
+                  <li>Vào <strong>Tiện ích mở rộng (Extensions)</strong> &gt; chọn <strong>Apps Script</strong>.</li>
+                  <li>Xoá hết mã cũ (nếu có), dán toàn bộ đoạn mã trên vào, nhấn nút <strong>Lưu (Ctrl + S)</strong>.</li>
+                  <li className="bg-amber-50 p-2 rounded-lg border border-amber-200 text-amber-950 font-medium">
+                    <strong className="text-amber-900">Quan trọng để tính năng Chặn IP cập nhật trạng thái "Chặn" và giữ sạch cột IP (không sinh dòng mới):</strong><br />
+                    • Cột IP trong sheet data2 lưu địa chỉ IP học sinh thuần (ví dụ: 113.169.89.135).<br />
+                    • Cột Trạng thái liền kề ghi chữ <strong>"Chặn"</strong> khi chặn thiết bị và tự động xóa rỗng khi mở chặn.<br />
+                    • Khi cập nhật mã Apps Script mới: Chọn <strong>Triển khai (Deploy)</strong> &gt; <strong>Quản lý bản triển khai (Manage deployments)</strong> &gt; Bấm biểu tượng <strong>Cây bút (Chỉnh sửa)</strong> &gt; Tại mục Phiên bản, chọn <strong>Phiên bản mới (New version)</strong> &gt; Bấm <strong>Triển khai (Deploy)</strong>.
+                  </li>
+                  <li>Sao chép đường dẫn Web App URL nhận được và dán vào tab <strong>"4. Nhập Link Web App & CSDL"</strong>.</li>
+                </ol>
+              </div>
             </div>
           )}
 

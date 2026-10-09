@@ -1,8 +1,26 @@
-import React, { useState, useMemo } from 'react';
-import { History, X, Trash2, Calendar, Clock, Eye, RefreshCw, FileSpreadsheet, FileText, CheckCircle2, Search, ShieldAlert, ArrowUpDown } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  History,
+  X,
+  Trash2,
+  Calendar,
+  Clock,
+  Eye,
+  RefreshCw,
+  FileSpreadsheet,
+  FileText,
+  CheckCircle2,
+  Search,
+  ShieldAlert,
+  ArrowUpDown,
+  Save,
+  Check,
+  Loader2,
+  AlertCircle,
+} from 'lucide-react';
 import { SubmissionRecord, ExamConfig } from '../types';
 import { matchSearchQuery } from '../utils/gradeService';
-import { compareSubmissionsNewestFirst } from '../utils/syncService';
+import { compareSubmissionsNewestFirst, sendIpBlockUpdateToSheet } from '../utils/syncService';
 import { isIpBlockedCheck, extractCleanIp, formatBlockedIpString } from '../utils/ipViolationService';
 
 interface HistoryModalProps {
@@ -35,8 +53,23 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingRecord, setDeletingRecord] = useState<SubmissionRecord | null>(null);
 
+  // Quản lý trạng thái lưu IP vào Google Sheet: Nút Lưu sáng lên khi thay đổi trạng thái
+  const [unsavedIps, setUnsavedIps] = useState<Set<string>>(new Set());
+  const [savingIps, setSavingIps] = useState<Set<string>>(new Set());
+  const [justSavedIps, setJustSavedIps] = useState<Set<string>>(new Set());
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    if (toastMsg) {
+      const timer = setTimeout(() => setToastMsg(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMsg]);
+
   const blockedIpsList = config?.blockedIps || [];
 
+  // Bật/Tắt trạng thái chặn cho IP từ danh sách lịch sử
   const handleToggleBlockIpFromHistory = (rawIp: string) => {
     if (!config || !onUpdateConfig) return;
     const clean = extractCleanIp(rawIp);
@@ -46,13 +79,131 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
     let nextBlocked: string[] = [];
     if (isCurrentlyBlocked) {
       nextBlocked = blockedIpsList.filter((b) => extractCleanIp(b) !== clean);
+      setToastMsg({
+        type: 'success',
+        text: `Đã đổi trạng thái cho IP ${clean} thành MỞ CHẶN. Bấm nút "Lưu" (sáng xanh) để lưu lên Sheet!`,
+      });
     } else {
-      nextBlocked = [...blockedIpsList, formatBlockedIpString(clean)];
+      nextBlocked = [...blockedIpsList.filter((b) => extractCleanIp(b) !== clean), clean];
+      setToastMsg({
+        type: 'success',
+        text: `Đã đổi trạng thái cho IP ${clean} thành CHẶN. Bấm nút "Lưu" (sáng xanh) để lưu lên Sheet!`,
+      });
     }
+
+    // Đánh dấu IP này có thay đổi trạng thái -> Nút Lưu sẽ SÁNG LÊN
+    setUnsavedIps((prev) => new Set(prev).add(clean));
+
     onUpdateConfig({
       ...config,
       blockedIps: nextBlocked,
     });
+  };
+
+  // Lưu trạng thái của IP này lên Google Sheet
+  const handleSaveIpBlockToSheet = async (rawIp: string) => {
+    const clean = extractCleanIp(rawIp);
+    if (!clean || !config?.data2Url) {
+      setToastMsg({
+        type: 'error',
+        text: 'Chưa có cấu hình URL Google Sheets data2!',
+      });
+      return;
+    }
+
+    const isCurrentlyBlocked = isIpBlockedCheck(clean, blockedIpsList, true);
+    setSavingIps((prev) => new Set(prev).add(clean));
+
+    try {
+      const res = await sendIpBlockUpdateToSheet(config.data2Url, clean, isCurrentlyBlocked);
+      if (res.success) {
+        setUnsavedIps((prev) => {
+          const next = new Set(prev);
+          next.delete(clean);
+          return next;
+        });
+        setJustSavedIps((prev) => new Set(prev).add(clean));
+        setTimeout(() => {
+          setJustSavedIps((prev) => {
+            const next = new Set(prev);
+            next.delete(clean);
+            return next;
+          });
+        }, 3000);
+
+        setToastMsg({
+          type: 'success',
+          text: `Đã lưu thành công trạng thái ${isCurrentlyBlocked ? 'CHẶN' : 'MỞ CHẶN'} cho IP ${clean} lên Google Sheet!`,
+        });
+
+        if (onRefreshFromSheet) {
+          try {
+            await onRefreshFromSheet();
+          } catch {}
+        }
+      } else {
+        setToastMsg({
+          type: 'error',
+          text: `Lưu thất bại: ${res.message}`,
+        });
+      }
+    } catch {
+      setToastMsg({
+        type: 'error',
+        text: 'Có lỗi khi kết nối Google Sheet để lưu trạng thái IP.',
+      });
+    } finally {
+      setSavingIps((prev) => {
+        const next = new Set(prev);
+        next.delete(clean);
+        return next;
+      });
+    }
+  };
+
+  // Lưu tất cả các IP có thay đổi trạng thái vào Google Sheet
+  const handleSaveAllPendingToSheet = async () => {
+    if (!config?.data2Url) {
+      setToastMsg({
+        type: 'error',
+        text: 'Chưa có cấu hình URL Google Sheets data2!',
+      });
+      return;
+    }
+    const pendingList: string[] = Array.from(unsavedIps);
+    if (pendingList.length === 0) return;
+
+    setIsSavingAll(true);
+    let successCount = 0;
+
+    try {
+      for (const ip of pendingList) {
+        const isCurrentlyBlocked = isIpBlockedCheck(ip, blockedIpsList, true);
+        const res = await sendIpBlockUpdateToSheet(config.data2Url, ip, isCurrentlyBlocked);
+        if (res.success) {
+          successCount++;
+        }
+      }
+
+      setUnsavedIps(new Set());
+      setToastMsg({
+        type: 'success',
+        text: `Đã lưu thành công ${successCount}/${pendingList.length} địa chỉ IP vào cột IP trên Google Sheet!`,
+      });
+
+      if (onRefreshFromSheet) {
+        try {
+          await onRefreshFromSheet();
+        } catch {}
+      }
+    } catch {
+      setToastMsg({
+        type: 'error',
+        text: 'Có lỗi khi lưu các thay đổi lên Google Sheet.',
+      });
+    } finally {
+      setIsSavingAll(false);
+    }
   };
 
   // Count duplicate IPs
@@ -147,6 +298,29 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                 <span>{duplicateIpCount} IP trùng</span>
               </button>
             )}
+
+            {/* Nút LƯU TẤT CẢ khi có thay đổi trạng thái IP */}
+            {unsavedIps.size > 0 && (
+              <button
+                onClick={handleSaveAllPendingToSheet}
+                disabled={isSavingAll}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-2.5 py-0.5 rounded text-[10px] sm:text-[11px] flex items-center gap-1 cursor-pointer transition-all shadow-md ring-2 ring-emerald-400 ring-offset-1 animate-pulse"
+                title="Bấm để lưu toàn bộ thay đổi trạng thái chặn lên Google Sheet"
+              >
+                {isSavingAll ? (
+                  <>
+                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                    <span>Đang lưu vào Sheet...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-2.5 h-2.5" />
+                    <span>Lưu vào Sheet ({unsavedIps.size})</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-300 inline-block ml-0.5 animate-ping" />
+                  </>
+                )}
+              </button>
+            )}
           </div>
           {history.length > 0 && (
             <div className="relative w-full sm:w-60">
@@ -161,6 +335,32 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
             </div>
           )}
         </div>
+
+        {/* Toast thông báo kết quả lưu */}
+        {toastMsg && (
+          <div
+            className={`px-3 py-1.5 flex items-center justify-between text-xs font-medium border-b transition-all flex-shrink-0 ${
+              toastMsg.type === 'success'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-rose-50 text-rose-800 border-rose-200'
+            }`}
+          >
+            <span className="flex items-center gap-1.5">
+              {toastMsg.type === 'success' ? (
+                <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+              ) : (
+                <AlertCircle className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+              )}
+              <span>{toastMsg.text}</span>
+            </span>
+            <button
+              onClick={() => setToastMsg(null)}
+              className="text-slate-400 hover:text-slate-600 font-bold ml-2 cursor-pointer"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Body list */}
         <div className="p-2 sm:p-6 overflow-y-auto flex-1 space-y-2 sm:space-y-3 bg-slate-100/50">
@@ -210,7 +410,6 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                     {record.ipAddress && (() => {
                       const cleanIp = extractCleanIp(record.ipAddress);
                       const isBlocked = isIpBlockedCheck(cleanIp, blockedIpsList, true);
-                      const displayIpString = isBlocked ? `${cleanIp} - Block` : cleanIp;
 
                       return (
                         <span
@@ -219,40 +418,95 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                               ? 'bg-rose-100 text-rose-900 border-rose-300 font-bold shadow-2xs'
                               : 'bg-slate-50 text-slate-600 border-slate-200'
                           }`}
-                          title={isBlocked ? `IP ${displayIpString} đang bị Giáo viên chặn vào phòng thi` : `IP của thiết bị: ${cleanIp}`}
+                          title={isBlocked ? `IP ${cleanIp} đang bị Chặn` : `IP của thiết bị: ${cleanIp}`}
                         >
                           <span className="flex items-center gap-1">
                             {isBlocked && <span className="text-rose-600">⛔</span>}
-                            <span>IP: <strong className={isBlocked ? 'text-rose-900 font-black' : 'text-slate-800'}>{displayIpString}</strong></span>
+                            <span>IP: <strong className={isBlocked ? 'text-rose-900 font-black' : 'text-slate-800'}>{cleanIp}</strong></span>
+                            {isBlocked && (
+                              <span className="px-1 py-0.2 rounded bg-rose-600 text-white font-bold text-[8px] tracking-wide">
+                                Chặn
+                              </span>
+                            )}
                           </span>
 
-                          {onUpdateConfig && (
-                            isBlocked ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleToggleBlockIpFromHistory(cleanIp);
-                                }}
-                                className="text-slate-600 hover:text-slate-900 hover:bg-rose-200/80 px-1 py-0.2 rounded text-[9px] ml-0.5 cursor-pointer font-sans transition-colors"
-                                title="Bấm để GỠ CHẶN cho IP này"
-                              >
-                                (Gỡ chặn)
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleToggleBlockIpFromHistory(cleanIp);
-                                }}
-                                className="text-rose-700 hover:text-white hover:bg-rose-600 px-1.5 py-0.2 rounded border border-rose-300 hover:border-rose-600 text-[9px] font-bold ml-0.5 transition-colors cursor-pointer bg-white"
-                                title="Bấm để chặn thủ công IP này (Thêm hậu tố - Block)"
-                              >
-                                + Chặn (- Block)
-                              </button>
-                            )
-                          )}
+                          {onUpdateConfig && (() => {
+                            const isUnsaved = unsavedIps.has(cleanIp);
+                            const isSaving = savingIps.has(cleanIp);
+                            const isJustSaved = justSavedIps.has(cleanIp);
+
+                            return (
+                              <span className="inline-flex items-center gap-1 ml-1 align-middle">
+                                {isBlocked ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleBlockIpFromHistory(cleanIp);
+                                    }}
+                                    className="text-slate-600 hover:text-slate-900 hover:bg-rose-200/80 px-1.5 py-0.5 rounded text-[9px] cursor-pointer font-sans transition-colors border border-slate-300 bg-white"
+                                    title="Bấm để GỠ CHẶN cho IP này"
+                                  >
+                                    (Gỡ chặn)
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleBlockIpFromHistory(cleanIp);
+                                    }}
+                                    className="text-rose-700 hover:text-white hover:bg-rose-600 px-1.5 py-0.5 rounded border border-rose-300 hover:border-rose-600 text-[9px] font-bold transition-colors cursor-pointer bg-white"
+                                    title="Bấm để chặn IP này"
+                                  >
+                                    + Chặn
+                                  </button>
+                                )}
+
+                                {/* Nút LƯU sau nút chặn IP - sáng lên khi thay đổi trạng thái */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSaveIpBlockToSheet(cleanIp);
+                                  }}
+                                  disabled={isSaving}
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5 transition-all cursor-pointer ${
+                                    isUnsaved
+                                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md ring-2 ring-emerald-400 ring-offset-1 animate-pulse font-extrabold active:scale-95'
+                                      : isJustSaved
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                      : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-300'
+                                  }`}
+                                  title={
+                                    isUnsaved
+                                      ? 'Trạng thái IP đã thay đổi! Bấm vào đây để LƯU lên Google Sheet'
+                                      : 'Bấm để lưu hoặc kiểm tra trạng thái trên Google Sheet'
+                                  }
+                                >
+                                  {isSaving ? (
+                                    <>
+                                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                      <span>Lưu...</span>
+                                    </>
+                                  ) : isJustSaved ? (
+                                    <>
+                                      <Check className="w-2.5 h-2.5 text-emerald-700" />
+                                      <span>Đã lưu ✓</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Save className={`w-2.5 h-2.5 ${isUnsaved ? 'text-white' : 'text-slate-500'}`} />
+                                      <span>Lưu</span>
+                                      {isUnsaved && (
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-300 inline-block ml-0.5 animate-ping" />
+                                      )}
+                                    </>
+                                  )}
+                                </button>
+                              </span>
+                            );
+                          })()}
                         </span>
                       );
                     })()}
