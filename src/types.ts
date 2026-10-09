@@ -53,6 +53,8 @@ export interface SubmissionRecord {
   endTime: string; // e.g., "8:15 04/09/2026"
   totalDuration: string; // e.g., "00:15"
   ipAddress?: string; // IP thuê bao: là IP thiết bị HS sử dụng (dạng IPv4: 113.169.89.135...)
+  status?: string; // Cột J trong datasheet2: Trạng thái ("Chặn" hoặc rỗng)
+  isBlocked?: boolean; // Cờ nhận diện IP này đang bị chặn
   timestamp: number;
   syncedToData2: boolean;
   questionResults: {

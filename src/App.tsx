@@ -48,6 +48,7 @@ import {
   saveExamToData1,
   normalizeAppsScriptUrl,
   fetchSubmissionsFromData2,
+  checkLiveIpBlockedOnSheet,
   syncSubmissionsFromSheetToHistory,
   getSubmissionHistory,
   clearSubmissionHistory,
@@ -58,7 +59,12 @@ import {
 import { checkEssayAnswerMatch } from './utils/gradeService';
 import { fetchClientIp } from './utils/ipService';
 import { formatStudentName, formatClassName } from './utils/studentFormatting';
-import { isIpBlockedCheck, formatBlockedIpString } from './utils/ipViolationService';
+import {
+  isIpBlockedCheck,
+  formatBlockedIpString,
+  extractBlockedIpsFromSubmissions,
+  extractCleanIp,
+} from './utils/ipViolationService';
 
 type AppScreen = 'start' | 'exam' | 'result';
 
@@ -76,13 +82,15 @@ export default function App() {
         const activeData1Url = isOldData1 ? DEFAULT_EXAM_CONFIG.data1Url : normalizeAppsScriptUrl(parsed.data1Url);
         const isOldData2 =
           !parsed.data2Url ||
+          parsed.data2Url.includes('AKfycbw2ArWfvmE9lJQQRrUNIv6y_EXS8yOzdVRF7AILq3MXjRiNjgwooOsco_4TeCoC2O3o') ||
           parsed.data2Url.includes('AKfycbw3o7fi087YgBy8WjQZwWqavHeUN8jFfr6T3d2kuWkF4WMajeUlI8xajSP0ZkbPKGbB') ||
           parsed.data2Url.includes('AKfycbxxT7uc08D92XLmNaTvbXJvrrDBYN257-ByspJ00BtOJvankVLbdqfHKddfDm-7BG2s') ||
           parsed.data2Url.includes('AKfycbzS107icL7jGKWU8gZFzC87WeJCRkBYxmTnqJNAwu63Vm1QZomRjn2P2JczWS5OguLn') ||
           parsed.data2Url.includes('AKfycbzNodWtP-Y8mIC1ZFkH9iNCH7mhZYmUXDrlNL4-haoZ8OwUOBfMcYWmJwmDR_EHUPis') ||
           parsed.data2Url.includes('AKfycbxdcQlU6nlvMStQ4ZFKv_8PcZwrpZGhMIMBS2F_Zbs5anKC6ohq1xJZj07lp-wg6yAS') ||
           parsed.data2Url.includes('AKfycby75dcZbrgLbtg2tymL47LqvmkItG1RD4Tab7dPStqMxyw8k2MGtP_zur7qwkAI_OJU') ||
-          parsed.data2Url.includes('AKfycbyn8IZAj243ZY4mkSVfAkZhUICFWwmKFq-FmjuYDZ4A1ghDhmuAri6Y9z61JlDBu8FY');
+          parsed.data2Url.includes('AKfycbyn8IZAj243ZY4mkSVfAkZhUICFWwmKFq-FmjuYDZ4A1ghDhmuAri6Y9z61JlDBu8FY') ||
+          parsed.data2Url.includes('AKfycbxnUdlNE9VUQvLuU-w6ZN0g7cm7jLtBh9KADa2zflWfKOl1kVnyDLPAiko5fF0LTYo9');
         const activeData2Url = isOldData2 ? DEFAULT_EXAM_CONFIG.data2Url : normalizeAppsScriptUrl(parsed.data2Url);
         return {
           ...DEFAULT_EXAM_CONFIG,
@@ -154,6 +162,21 @@ export default function App() {
           if (sheetData && sheetData.length > 0) {
             const updated = syncSubmissionsFromSheetToHistory(sheetData);
             setHistoryList(updated);
+
+            // Tự động quét và đồng bộ các IP bị chặn từ Cột J (Trạng thái) hoặc IP của Google Sheets data2
+            const blockedFromSheet = extractBlockedIpsFromSubmissions(sheetData);
+            if (blockedFromSheet.length > 0) {
+              setConfig((prev) => {
+                const existing = (prev.blockedIps || []).map(extractCleanIp).filter(Boolean);
+                const combined = Array.from(new Set([...existing, ...blockedFromSheet.map(extractCleanIp).filter(Boolean)]));
+                if (combined.length !== existing.length) {
+                  const nextConfig = { ...prev, blockedIps: combined };
+                  localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(nextConfig));
+                  return nextConfig;
+                }
+                return prev;
+              });
+            }
           }
         })
         .catch(() => {});
@@ -175,6 +198,19 @@ export default function App() {
       const sheetData = await fetchSubmissionsFromData2(config.data2Url);
       const updated = syncSubmissionsFromSheetToHistory(sheetData || []);
       setHistoryList(updated);
+
+      // Quét và đồng bộ các IP bị chặn từ Cột J (Trạng thái) hoặc IP trên sheet
+      const blockedFromSheet = extractBlockedIpsFromSubmissions(sheetData || []);
+      if (blockedFromSheet.length > 0) {
+        setConfig((prev) => {
+          const existing = (prev.blockedIps || []).map(extractCleanIp).filter(Boolean);
+          const combined = Array.from(new Set([...existing, ...blockedFromSheet.map(extractCleanIp).filter(Boolean)]));
+          const nextConfig = { ...prev, blockedIps: combined };
+          localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(nextConfig));
+          return nextConfig;
+        });
+      }
+
       if (sheetData && sheetData.length > 0) {
         setSyncToast(`Đã lấy ${sheetData.length} bài nộp từ Cơ sở dữ liệu!`);
       } else {
@@ -375,8 +411,50 @@ export default function App() {
     };
   }, [screen, studentName, className, answers, startFormattedTime, startTimestamp, examQuestions]);
 
+  const handleUpdateBlockedIps = useCallback((newList: string[]) => {
+    setConfig((prev) => {
+      const existing = (prev.blockedIps || []).map(extractCleanIp).filter(Boolean);
+      const combined = Array.from(new Set([...existing, ...newList.map(extractCleanIp).filter(Boolean)]));
+      if (combined.length !== existing.length) {
+        const nextConfig = { ...prev, blockedIps: combined };
+        localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(nextConfig));
+        return nextConfig;
+      }
+      return prev;
+    });
+  }, []);
+
+  // Giám sát phòng thi: nếu học sinh đang làm bài mà Giáo viên kích hoạt lệnh Chặn IP trên Google Sheet
+  useEffect(() => {
+    if (screen !== 'exam' || !config.data2Url || config.enableIpBlocking === false) return;
+    const interval = setInterval(async () => {
+      try {
+        const clientIp = await fetchClientIp();
+        if (clientIp) {
+          const live = await checkLiveIpBlockedOnSheet(config.data2Url, clientIp);
+          if (live.isBlocked) {
+            handleUpdateBlockedIps(live.blockedList);
+            clearDraftExam();
+            setScreen('start');
+            alert(`⛔ Bài thi của bạn đã bị ngắt kết nối do Giáo viên đã kích hoạt lệnh CHẶN cho địa chỉ IP này (${clientIp}) trên Google Sheet!`);
+          }
+        }
+      } catch {}
+    }, 25000);
+    return () => clearInterval(interval);
+  }, [screen, config.data2Url, config.enableIpBlocking, handleUpdateBlockedIps]);
+
   // 3. Start Exam Action
-  const handleStartExam = (name: string, cls: string) => {
+  const handleStartExam = async (name: string, cls: string) => {
+    // Kiểm tra chốt chặn an toàn địa chỉ IP trước khi cho vào phòng thi
+    try {
+      const clientIp = await fetchClientIp();
+      if (isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true)) {
+        alert(`⛔ Thiết bị của bạn (IP: ${clientIp}) đã bị Giáo viên chặn vào phòng thi!`);
+        return;
+      }
+    } catch {}
+
     const formattedName = formatStudentName(name);
     const formattedClass = formatClassName(cls);
     const now = new Date();
@@ -420,8 +498,16 @@ export default function App() {
   };
 
   // Resume Draft
-  const handleResumeDraft = () => {
+  const handleResumeDraft = async () => {
     if (!existingDraft) return;
+    try {
+      const clientIp = await fetchClientIp();
+      if (isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true)) {
+        alert(`⛔ Thiết bị của bạn (IP: ${clientIp}) đã bị Giáo viên chặn vào làm bài!`);
+        return;
+      }
+    } catch {}
+
     const formattedName = formatStudentName(existingDraft.studentInfo.fullName);
     const formattedClass = formatClassName(existingDraft.studentInfo.className);
 
@@ -591,7 +677,7 @@ export default function App() {
           : 1;
 
         const isClientBlocked = isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true);
-        const recordedIp = isClientBlocked && clientIp ? formatBlockedIpString(clientIp) : clientIp;
+        const cleanClientIp = clientIp ? extractCleanIp(clientIp) : '';
 
         const record: SubmissionRecord = {
           stt: nextSTT,
@@ -603,7 +689,9 @@ export default function App() {
           startTime: startFormattedTime || endTime,
           endTime,
           totalDuration,
-          ipAddress: recordedIp,
+          ipAddress: cleanClientIp,
+          status: isClientBlocked ? 'Chặn' : '',
+          isBlocked: isClientBlocked,
           timestamp: Date.now(),
           syncedToData2: false,
           questionResults,
@@ -667,6 +755,30 @@ export default function App() {
     };
     setConfig(merged);
     localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(merged));
+
+    // Đồng bộ ngay lập tức trạng thái Chặn (Cột J) và làm sạch IP thuần (Cột I) trong giao diện
+    if (updated.blockedIps !== undefined) {
+      setHistoryList((prevHistory) => {
+        const nextBlocked = updated.blockedIps || [];
+        const updatedHistory = prevHistory.map((rec) => {
+          const clean = extractCleanIp(rec.ipAddress);
+          if (!clean) return rec;
+          const isBlocked = isIpBlockedCheck(clean, nextBlocked, true);
+          const expectedStatus = isBlocked ? 'Chặn' : '';
+          if (rec.ipAddress !== clean || rec.status !== expectedStatus || rec.isBlocked !== isBlocked) {
+            return {
+              ...rec,
+              ipAddress: clean,
+              status: expectedStatus,
+              isBlocked: isBlocked,
+            };
+          }
+          return rec;
+        });
+        localStorage.setItem('kiem_tra_thuong_xuyen_history', JSON.stringify(updatedHistory));
+        return updatedHistory;
+      });
+    }
   };
 
   // Reload questions from Google Sheet Data1
@@ -803,6 +915,7 @@ export default function App() {
             onResumeDraft={handleResumeDraft}
             onDiscardDraft={handleDiscardDraft}
             onAuthorClick={handleAuthorClick}
+            onUpdateBlockedIps={handleUpdateBlockedIps}
           />
         )}
 
