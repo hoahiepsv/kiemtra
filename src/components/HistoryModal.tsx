@@ -315,7 +315,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                 ) : (
                   <>
                     <Save className="w-2.5 h-2.5" />
-                    <span>Lưu vào Sheet ({unsavedIps.size})</span>
+                    <span>Lưu</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-300 inline-block ml-0.5 animate-ping" />
                   </>
                 )}

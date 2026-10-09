@@ -92,7 +92,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
   }, [actionMessage]);
 
   // Lưu trạng thái của một địa chỉ IP cụ thể vào cột IP trong Google Sheet
-  const handleSaveIpBlockToSheet = async (rawIp: string) => {
+  const handleSaveIpBlockToSheet = async (rawIp: string, targetBlockedState?: boolean) => {
     const clean = extractCleanIp(rawIp);
     if (!clean) return;
     if (!config?.data2Url) {
@@ -103,7 +103,9 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
       return;
     }
 
-    const isCurrentlyBlocked = isIpBlockedCheck(clean, blockedIpsList, true);
+    const isCurrentlyBlocked = targetBlockedState !== undefined
+      ? targetBlockedState
+      : isIpBlockedCheck(clean, blockedIpsList, true);
     setSavingIps((prev) => new Set(prev).add(clean));
 
     try {
@@ -213,15 +215,21 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
       nextBlocked = blockedIpsList.filter((b) => extractCleanIp(b) !== clean);
       setActionMessage({
         type: 'success',
-        text: `Đã đổi trạng thái cho IP ${clean} thành MỞ CHẶN. Bấm nút "Lưu" (sáng xanh) để lưu vào Google Sheet!`,
+        text: `Đã mở chặn cho IP ${clean}. Đang đồng bộ lên Google Sheet...`,
       });
+      if (config.data2Url) {
+        handleSaveIpBlockToSheet(clean, false);
+      }
     } else {
       // Chặn: thêm IP sạch vào danh sách
       nextBlocked = [...blockedIpsList.filter((b) => extractCleanIp(b) !== clean), clean];
       setActionMessage({
         type: 'success',
-        text: `Đã đổi trạng thái cho IP ${clean} thành CHẶN. Bấm nút "Lưu" (sáng xanh) để lưu vào Google Sheet!`,
+        text: `Đã chặn IP ${clean}. Đang đồng bộ lên Google Sheet...`,
       });
+      if (config.data2Url) {
+        handleSaveIpBlockToSheet(clean, true);
+      }
     }
 
     // Đánh dấu IP này có trạng thái mới chưa lưu lên Sheet -> Nút LƯU sẽ SÁNG LÊN
@@ -256,6 +264,9 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
     if (clean) {
       // Đánh dấu IP này chưa lưu lên Sheet -> Nút LƯU sẽ SÁNG LÊN
       setUnsavedIps((prev) => new Set(prev).add(clean));
+      if (config.data2Url) {
+        handleSaveIpBlockToSheet(clean, true);
+      }
     }
 
     onUpdateConfig({
@@ -265,7 +276,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
     setManualIpInput('');
     setActionMessage({
       type: 'success',
-      text: `${result.message}. Bấm nút "Lưu vào Sheet" (sáng xanh) để lưu vào cột IP trong Google Sheet!`,
+      text: `${result.message}. Bấm nút "Lưu" (sáng xanh) để lưu vào Google Sheet!`,
     });
     setIsBlockedListExpanded(true);
   };
@@ -278,6 +289,9 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
 
     if (clean) {
       setUnsavedIps((prev) => new Set(prev).add(clean));
+      if (config.data2Url) {
+        handleSaveIpBlockToSheet(clean, false);
+      }
     }
 
     onUpdateConfig({
@@ -286,7 +300,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
     });
     setActionMessage({
       type: 'success',
-      text: `Đã gỡ ${clean} khỏi danh sách chặn. Bấm nút "Lưu vào Sheet" (sáng xanh) để lưu vào cột IP trong Google Sheet!`,
+      text: `Đã gỡ ${clean} khỏi danh sách chặn. Bấm nút "Lưu" (sáng xanh) để lưu vào Google Sheet!`,
     });
   };
 
@@ -308,7 +322,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
       });
       setActionMessage({
         type: 'success',
-        text: 'Đã gỡ chặn toàn bộ danh sách IP. Bấm nút "Lưu vào Sheet" (sáng xanh) để lưu vào cột IP trong Google Sheet!',
+        text: 'Đã gỡ chặn toàn bộ danh sách IP. Bấm nút "Lưu" (sáng xanh) để lưu vào Google Sheet!',
       });
     }
   };
@@ -669,7 +683,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                   ) : (
                     <>
                       <Save className="w-3.5 h-3.5" />
-                      <span>Lưu vào Sheet ({unsavedIps.size})</span>
+                      <span>Lưu</span>
                       <span className="w-2 h-2 rounded-full bg-amber-300 inline-block ml-0.5 animate-ping" />
                     </>
                   )}
@@ -1000,7 +1014,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                                 ? 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs'
                                 : 'bg-rose-600 hover:bg-rose-700 text-white shadow-2xs active:scale-95'
                             }`}
-                            title={isGroupIpBlocked ? 'Mở khóa thiết bị này' : 'Chặn IP này không cho vào phòng thi'}
+                            title={isGroupIpBlocked ? 'Mở khóa thiết bị này' : 'Chặn SBD này'}
                           >
                             <ShieldAlert className="w-3.5 h-3.5" />
                             <span>{isGroupIpBlocked ? 'Mở chặn IP' : 'Chặn IP'}</span>
