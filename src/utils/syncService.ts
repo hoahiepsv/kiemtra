@@ -503,8 +503,8 @@ export async function sendIpBlockUpdateToSheet(
     return {
       success: true,
       message: isBlocked
-        ? `Đã ghi trạng thái "Chặn" vào Cột J (Trạng thái) cho IP ${clean} trên Google Sheets data2!`
-        : `Đã mở chặn cho IP ${clean} (xóa trạng thái ở Cột J) trên Google Sheets data2!`,
+        ? `Đã ghi trạng thái "Chặn" cho IP ${clean} trên Google Sheets data2!`
+        : `Đã mở chặn cho IP ${clean} trên Google Sheets data2!`,
     };
   } catch (err) {
     console.warn('Lỗi khi gửi cập nhật chặn IP lên Google Sheets data2:', err);
@@ -679,13 +679,14 @@ export async function fetchSubmissionsFromData2(data2Url: string): Promise<Submi
     if (!u.searchParams.has('sheet')) {
       u.searchParams.set('sheet', 'data2');
     }
+    u.searchParams.set('_t', Date.now().toString());
     targetUrl = u.toString();
   } catch {
     targetUrl = data2Url.trim();
   }
 
   try {
-    const res = await fetch(targetUrl);
+    const res = await fetch(targetUrl, { cache: 'no-store' });
     if (!res.ok) return [];
     const json = await res.json();
     if (json.status === 'success' && Array.isArray(json.data)) {

@@ -351,7 +351,7 @@ function doPost(e) {
         isBlocked: isBlockedParam,
         statusValue: statusValue,
         updatedRows: updatedCount,
-        message: "Đã cập nhật trạng thái " + (isBlockedParam ? "CHẶN vào Cột J (Trạng thái)" : "MỞ CHẶN (xóa Cột J)") + " cho IP " + cleanTarget + " trên Google Sheet data2!"
+        message: "Đã cập nhật trạng thái " + (isBlockedParam ? "CHẶN" : "MỞ CHẶN") + " cho IP " + cleanTarget + " trên Google Sheet data2!"
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -1328,7 +1328,7 @@ function doPost(e) {
         isBlocked: isBlockedParam,
         statusValue: statusValue,
         updatedRows: updatedCount,
-        message: "Đã cập nhật trạng thái " + (isBlockedParam ? "CHẶN vào Cột J (Trạng thái)" : "MỞ CHẶN (xóa Cột J)") + " cho IP " + cleanTarget + " trên sheet data2!"
+        message: "Đã cập nhật trạng thái " + (isBlockedParam ? "CHẶN" : "MỞ CHẶN") + " cho IP " + cleanTarget + " trên sheet data2!"
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
