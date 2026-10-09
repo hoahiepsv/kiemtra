@@ -48,7 +48,6 @@ import {
   saveExamToData1,
   normalizeAppsScriptUrl,
   fetchSubmissionsFromData2,
-  checkLiveIpBlockedOnSheet,
   syncSubmissionsFromSheetToHistory,
   getSubmissionHistory,
   clearSubmissionHistory,
@@ -159,24 +158,18 @@ export default function App() {
     if (config.data2Url && config.data2Url.trim()) {
       fetchSubmissionsFromData2(config.data2Url)
         .then((sheetData) => {
-          if (sheetData && sheetData.length > 0) {
+          if (Array.isArray(sheetData)) {
             const updated = syncSubmissionsFromSheetToHistory(sheetData);
             setHistoryList(updated);
 
-            // Tự động quét và đồng bộ các IP bị chặn từ Cột J (Trạng thái) hoặc IP của Google Sheets data2
+            // Tự động quét và đồng bộ các IP bị chặn từ Google Sheets data2 (nguồn chính xác duy nhất)
             const blockedFromSheet = extractBlockedIpsFromSubmissions(sheetData);
-            if (blockedFromSheet.length > 0) {
-              setConfig((prev) => {
-                const existing = (prev.blockedIps || []).map(extractCleanIp).filter(Boolean);
-                const combined = Array.from(new Set([...existing, ...blockedFromSheet.map(extractCleanIp).filter(Boolean)]));
-                if (combined.length !== existing.length) {
-                  const nextConfig = { ...prev, blockedIps: combined };
-                  localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(nextConfig));
-                  return nextConfig;
-                }
-                return prev;
-              });
-            }
+            const cleanBlockedFromSheet = Array.from(new Set(blockedFromSheet.map(extractCleanIp).filter(Boolean)));
+            setConfig((prev) => {
+              const nextConfig = { ...prev, blockedIps: cleanBlockedFromSheet };
+              localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(nextConfig));
+              return nextConfig;
+            });
           }
         })
         .catch(() => {});
@@ -199,17 +192,14 @@ export default function App() {
       const updated = syncSubmissionsFromSheetToHistory(sheetData || []);
       setHistoryList(updated);
 
-      // Quét và đồng bộ các IP bị chặn từ Cột J (Trạng thái) hoặc IP trên sheet
+      // Quét và đồng bộ các IP bị chặn từ sheet (cho phép mở chặn nếu trên sheet đã gỡ)
       const blockedFromSheet = extractBlockedIpsFromSubmissions(sheetData || []);
-      if (blockedFromSheet.length > 0) {
-        setConfig((prev) => {
-          const existing = (prev.blockedIps || []).map(extractCleanIp).filter(Boolean);
-          const combined = Array.from(new Set([...existing, ...blockedFromSheet.map(extractCleanIp).filter(Boolean)]));
-          const nextConfig = { ...prev, blockedIps: combined };
-          localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(nextConfig));
-          return nextConfig;
-        });
-      }
+      const cleanBlockedFromSheet = Array.from(new Set(blockedFromSheet.map(extractCleanIp).filter(Boolean)));
+      setConfig((prev) => {
+        const nextConfig = { ...prev, blockedIps: cleanBlockedFromSheet };
+        localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(nextConfig));
+        return nextConfig;
+      });
 
       if (sheetData && sheetData.length > 0) {
         setSyncToast(`Đã lấy ${sheetData.length} bài nộp từ Cơ sở dữ liệu!`);
@@ -412,37 +402,13 @@ export default function App() {
   }, [screen, studentName, className, answers, startFormattedTime, startTimestamp, examQuestions]);
 
   const handleUpdateBlockedIps = useCallback((newList: string[]) => {
+    const cleanNewList = Array.from(new Set(newList.map(extractCleanIp).filter(Boolean)));
     setConfig((prev) => {
-      const existing = (prev.blockedIps || []).map(extractCleanIp).filter(Boolean);
-      const combined = Array.from(new Set([...existing, ...newList.map(extractCleanIp).filter(Boolean)]));
-      if (combined.length !== existing.length) {
-        const nextConfig = { ...prev, blockedIps: combined };
-        localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(nextConfig));
-        return nextConfig;
-      }
-      return prev;
+      const nextConfig = { ...prev, blockedIps: cleanNewList };
+      localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(nextConfig));
+      return nextConfig;
     });
   }, []);
-
-  // Giám sát phòng thi: nếu học sinh đang làm bài mà Giáo viên kích hoạt lệnh Chặn IP trên Google Sheet
-  useEffect(() => {
-    if (screen !== 'exam' || !config.data2Url || config.enableIpBlocking === false) return;
-    const interval = setInterval(async () => {
-      try {
-        const clientIp = await fetchClientIp();
-        if (clientIp) {
-          const live = await checkLiveIpBlockedOnSheet(config.data2Url, clientIp);
-          if (live.isBlocked) {
-            handleUpdateBlockedIps(live.blockedList);
-            clearDraftExam();
-            setScreen('start');
-            alert(`⛔ Bài thi của bạn đã bị ngắt kết nối do Giáo viên đã kích hoạt lệnh CHẶN cho địa chỉ IP này (${clientIp}) trên Google Sheet!`);
-          }
-        }
-      } catch {}
-    }, 25000);
-    return () => clearInterval(interval);
-  }, [screen, config.data2Url, config.enableIpBlocking, handleUpdateBlockedIps]);
 
   // 3. Start Exam Action
   const handleStartExam = async (name: string, cls: string) => {
@@ -450,7 +416,7 @@ export default function App() {
     try {
       const clientIp = await fetchClientIp();
       if (isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true)) {
-        alert(`⛔ Thiết bị của bạn (IP: ${clientIp}) đã bị Giáo viên chặn vào phòng thi!`);
+        alert(`⛔ Thí sinh (SBD: ${clientIp}) đã bị tạm khóa vì đã vi phạm quy định!`);
         return;
       }
     } catch {}
@@ -503,7 +469,7 @@ export default function App() {
     try {
       const clientIp = await fetchClientIp();
       if (isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true)) {
-        alert(`⛔ Thiết bị của bạn (IP: ${clientIp}) đã bị Giáo viên chặn vào làm bài!`);
+        alert(`⛔ Thí sinh (SBD: ${clientIp}) đã bị tạm khóa vì đã vi phạm quy định!`);
         return;
       }
     } catch {}
