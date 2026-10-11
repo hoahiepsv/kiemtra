@@ -39,6 +39,7 @@ import {
   saveDraftExam,
   loadDraftExam,
   clearDraftExam,
+  saveSubmissionHistory,
   sendSubmissionToData2,
   requestNotificationPermission,
   showPushNotification,
@@ -60,9 +61,11 @@ import { fetchClientIp } from './utils/ipService';
 import { formatStudentName, formatClassName } from './utils/studentFormatting';
 import {
   isIpBlockedCheck,
+  isIpOverSubmissionLimit,
   formatBlockedIpString,
   extractBlockedIpsFromSubmissions,
   extractCleanIp,
+  recordIpEntryOnDevice,
 } from './utils/ipViolationService';
 
 type AppScreen = 'start' | 'exam' | 'result';
@@ -77,7 +80,8 @@ export default function App() {
         const isOldData1 =
           !parsed.data1Url ||
           parsed.data1Url.includes('AKfycbzVR-FeTa2IZ20Nodk3ts3TUJqiadghILLCzyc8NZ6EAqzECm9gSbFVvA4EBmmOMpCO2A') ||
-          parsed.data1Url.includes('AKfycbz9zQcN3CuaLsjyHEQeNiR5vJv_gfWhwBKDFL35k-q5VVQQwr0yBqBPCbyE1OF1A86jsw');
+          parsed.data1Url.includes('AKfycbz9zQcN3CuaLsjyHEQeNiR5vJv_gfWhwBKDFL35k-q5VVQQwr0yBqBPCbyE1OF1A86jsw') ||
+          parsed.data1Url.includes('AKfycbxdxVRbNGgLoTtofRU9BeB8NLxQyU3z2dAmiGndNwOjJ8T9NzioN0VsVTaipKwg8KBOpw');
         const activeData1Url = isOldData1 ? DEFAULT_EXAM_CONFIG.data1Url : normalizeAppsScriptUrl(parsed.data1Url);
         const isOldData2 =
           !parsed.data2Url ||
@@ -415,7 +419,10 @@ export default function App() {
     // Kiểm tra chốt chặn an toàn địa chỉ IP trước khi cho vào phòng thi
     try {
       const clientIp = await fetchClientIp();
-      if (isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true)) {
+      if (
+        isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true) ||
+        isIpOverSubmissionLimit(clientIp, config.maxSubmissionsPerIp, config.enableIpBlocking ?? true)
+      ) {
         alert(`⛔ Thí sinh (SBD: ${clientIp}) đã bị tạm khóa vì đã vi phạm quy định!`);
         return;
       }
@@ -427,12 +434,12 @@ export default function App() {
     const formattedStart = formatDateForSheet(now);
     const ts = now.getTime();
 
-    // Sinh đề thi hoán đổi ngẫu nhiên câu hỏi & đáp án (theo cấu hình cài đặt)
-    const shuffled = generateShuffledExam(
-      questions,
-      config.shuffleQuestions !== false,
-      config.shuffleOptions !== false
-    );
+    // Sinh đề thi hoán đổi ngẫu nhiên câu hỏi & đáp án (theo cấu hình cài đặt: G1, H1, I1)
+    const shuffled = generateShuffledExam(questions, {
+      mcShuffleMode: config.mcShuffleMode || 'BAT_BAT',
+      shuffleTrueFalse: config.shuffleTrueFalse ?? true,
+      shuffleEssay: config.shuffleEssay ?? false,
+    });
     setExamQuestions(shuffled);
 
     setStudentName(formattedName);
@@ -456,6 +463,11 @@ export default function App() {
     });
     setExistingDraft(null);
 
+    // Ghi nhận lượt vào làm bài của IP thiết bị này trên JSON máy
+    fetchClientIp().then((ip) => {
+      if (ip) recordIpEntryOnDevice(ip);
+    });
+
     // Friendly push notification reminder
     showPushNotification(
       'Bắt đầu làm bài kiểm tra',
@@ -468,7 +480,10 @@ export default function App() {
     if (!existingDraft) return;
     try {
       const clientIp = await fetchClientIp();
-      if (isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true)) {
+      if (
+        isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true) ||
+        isIpOverSubmissionLimit(clientIp, config.maxSubmissionsPerIp, config.enableIpBlocking ?? true)
+      ) {
         alert(`⛔ Thí sinh (SBD: ${clientIp}) đã bị tạm khóa vì đã vi phạm quy định!`);
         return;
       }
@@ -481,11 +496,11 @@ export default function App() {
     if (existingDraft.shuffledQuestions && existingDraft.shuffledQuestions.length > 0) {
       setExamQuestions(existingDraft.shuffledQuestions);
     } else {
-      const shuffled = generateShuffledExam(
-        questions,
-        config.shuffleQuestions !== false,
-        config.shuffleOptions !== false
-      );
+      const shuffled = generateShuffledExam(questions, {
+        mcShuffleMode: config.mcShuffleMode || 'BAT_BAT',
+        shuffleTrueFalse: config.shuffleTrueFalse ?? true,
+        shuffleEssay: config.shuffleEssay ?? false,
+      });
       setExamQuestions(shuffled);
     }
 
@@ -666,11 +681,16 @@ export default function App() {
         // Clear the draft now that it's submitted
         clearDraftExam();
 
+        // Lưu bài nộp vào JSON lịch sử trên máy này để đếm số lần và đối chiếu
+        saveSubmissionHistory(record);
+        setHistoryList(getSubmissionHistory());
+
         // Attempt sending to Google Sheet (data2)
         if (config.data2Url && config.data2Url.trim()) {
           const sendResult = await sendSubmissionToData2(config.data2Url, record);
           if (sendResult.success) {
             record.syncedToData2 = true;
+            updateSubmissionInHistory(record);
             setSyncToast('Đã gửi điểm cho giáo viên');
           } else {
             setSyncToast(sendResult.message);

@@ -25,8 +25,12 @@ export interface ExamConfig {
   data2Url?: string;
   shuffleQuestions?: boolean; // Tự động xáo trộn thứ tự các câu hỏi khi học sinh làm bài
   shuffleOptions?: boolean; // Tự động xáo trộn thứ tự các đáp án A, B, C, D của câu trắc nghiệm
-  enableIpBlocking?: boolean; // Nút gạt Bật/Tắt chặn IP vi phạm quy chế kiểm tra
-  blockedIps?: string[]; // Danh sách các IP bị chặn (kèm hậu tố "- Block")
+  enableIpBlocking?: boolean; // E1: Trạng thái bật/tắt tự động chặn IP vi phạm số lần vào làm
+  maxSubmissionsPerIp?: number; // F1: Số lần cho phép 1 IP vào làm
+  mcShuffleMode?: 'BAT_BAT' | 'BAT_TAT' | 'TAT_BAT' | 'TAT_TAT'; // G1: Chế độ hoán đổi trắc nghiệm 1 đáp án
+  shuffleTrueFalse?: boolean; // H1: Bật/tắt hoán vị các câu hỏi đúng/sai
+  shuffleEssay?: boolean; // I1: Bật/tắt hoán vị các câu hỏi tự luận
+  blockedIps?: string[]; // Danh sách các IP bị chặn
 }
 
 export interface StudentAnswer {
