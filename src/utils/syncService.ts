@@ -558,6 +558,41 @@ export async function fetchQuestionsFromData1(data1Url: string): Promise<{
         if (json.config.durationMinutes) {
           config.durationMinutes = Number(json.config.durationMinutes) || 15;
         }
+        // E1: Trạng thái bật/tắt tự động chặn IP vi phạm số lần vào làm
+        if (json.config.enableIpBlocking !== undefined) {
+          const rawE = String(json.config.enableIpBlocking).trim().toUpperCase();
+          config.enableIpBlocking = rawE === 'BẬT' || rawE === 'BAT' || rawE === 'TRUE' || json.config.enableIpBlocking === true;
+        }
+        // F1: Số lần cho phép 1 IP vào làm
+        if (json.config.maxSubmissionsPerIp !== undefined) {
+          const numF = parseInt(String(json.config.maxSubmissionsPerIp), 10);
+          if (!isNaN(numF) && numF > 0) {
+            config.maxSubmissionsPerIp = numF;
+          }
+        }
+        // G1: Chế độ hoán đổi trắc nghiệm 1 đáp án (BẬT - BẬT, BẬT - TẮT, TẮT - BẬT, TẮT - TẮT)
+        if (json.config.mcShuffleMode !== undefined) {
+          const rawG = String(json.config.mcShuffleMode).trim().toUpperCase().replace(/\s+/g, '');
+          if (rawG.includes('BẬT-BẬT') || rawG.includes('BAT-BAT') || rawG.includes('BAT_BAT')) {
+            config.mcShuffleMode = 'BAT_BAT';
+          } else if (rawG.includes('BẬT-TẮT') || rawG.includes('BAT-TAT') || rawG.includes('BAT_TAT')) {
+            config.mcShuffleMode = 'BAT_TAT';
+          } else if (rawG.includes('TẮT-BẬT') || rawG.includes('TAT-BAT') || rawG.includes('TAT_BAT')) {
+            config.mcShuffleMode = 'TAT_BAT';
+          } else if (rawG.includes('TẮT-TẮT') || rawG.includes('TAT-TAT') || rawG.includes('TAT_TAT')) {
+            config.mcShuffleMode = 'TAT_TAT';
+          }
+        }
+        // H1: Trạng thái bật/tắt hoán vị các câu hỏi đúng/sai
+        if (json.config.shuffleTrueFalse !== undefined) {
+          const rawH = String(json.config.shuffleTrueFalse).trim().toUpperCase();
+          config.shuffleTrueFalse = rawH === 'BẬT' || rawH === 'BAT' || rawH === 'TRUE' || json.config.shuffleTrueFalse === true;
+        }
+        // I1: Trạng thái bật/tắt hoán vị các câu hỏi tự luận
+        if (json.config.shuffleEssay !== undefined) {
+          const rawI = String(json.config.shuffleEssay).trim().toUpperCase();
+          config.shuffleEssay = rawI === 'BẬT' || rawI === 'BAT' || rawI === 'TRUE' || json.config.shuffleEssay === true;
+        }
       }
 
       // Đảm bảo các câu hỏi có id và orderNumber chuẩn
@@ -618,13 +653,34 @@ export async function saveExamToData1(
     };
   }
 
+  // Chuyển đổi giá trị hiển thị chuẩn lưu vào ô Google Sheets:
+  // E1: BẬT hoặc TẮT
+  const enableIpBlockingText = config.enableIpBlocking === false ? 'TẮT' : 'BẬT';
+  // F1: Số nguyên (số lần)
+  const maxSubmissionsText = Number(config.maxSubmissionsPerIp) > 0 ? Number(config.maxSubmissionsPerIp) : 1;
+  // G1: "BẬT - BẬT", "BẬT - TẮT", "TẮT - BẬT", "TẮT - TẮT"
+  let mcShuffleModeText = 'BẬT - BẬT';
+  if (config.mcShuffleMode === 'BAT_TAT') mcShuffleModeText = 'BẬT - TẮT';
+  else if (config.mcShuffleMode === 'TAT_BAT') mcShuffleModeText = 'TẮT - BẬT';
+  else if (config.mcShuffleMode === 'TAT_TAT') mcShuffleModeText = 'TẮT - TẮT';
+  else if (config.mcShuffleMode === 'BAT_BAT') mcShuffleModeText = 'BẬT - BẬT';
+  // H1: BẬT hoặc TẮT
+  const shuffleTrueFalseText = config.shuffleTrueFalse === false ? 'TẮT' : 'BẬT';
+  // I1: BẬT hoặc TẮT
+  const shuffleEssayText = config.shuffleEssay === true ? 'BẬT' : 'TẮT';
+
   const payload = {
     action: 'saveExam',
     config: {
-      schoolName: config.schoolName,
-      examName: config.examName,
-      subject: config.subject,
-      durationMinutes: config.durationMinutes,
+      schoolName: config.schoolName, // C1
+      examName: config.examName, // A1
+      subject: config.subject, // B1
+      durationMinutes: config.durationMinutes, // D1
+      enableIpBlocking: enableIpBlockingText, // E1
+      maxSubmissionsPerIp: maxSubmissionsText, // F1
+      mcShuffleMode: mcShuffleModeText, // G1
+      shuffleTrueFalse: shuffleTrueFalseText, // H1
+      shuffleEssay: shuffleEssayText, // I1
     },
     questions: questions.map((q, idx) => ({
       orderNumber: q.orderNumber || idx + 1,

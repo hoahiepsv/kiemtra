@@ -258,3 +258,75 @@ export function removeIpFromBlockedList(targetIp: string, currentList: string[] 
   return currentList.filter((item) => extractCleanIp(item) !== clean);
 }
 
+/**
+ * Ghi nhận thêm 1 lần vào làm bài của IP trên JSON bộ nhớ máy này
+ */
+export function recordIpEntryOnDevice(clientIp: string | null | undefined): void {
+  if (!clientIp) return;
+  const clean = extractCleanIp(clientIp);
+  if (!clean) return;
+  try {
+    const raw = localStorage.getItem('kiem_tra_thuong_xuyen_ip_entries');
+    const data = raw ? JSON.parse(raw) : {};
+    data[clean] = (Number(data[clean]) || 0) + 1;
+    localStorage.setItem('kiem_tra_thuong_xuyen_ip_entries', JSON.stringify(data));
+  } catch (err) {
+    console.error('Lỗi khi ghi nhận lượt vào làm:', err);
+  }
+}
+
+/**
+ * Đếm số lần 1 IP đã vào làm bài dựa trên dữ liệu JSON lưu trữ trên máy (LocalStorage JSON)
+ */
+export function countIpSubmissionsOnDevice(clientIp: string | null | undefined): number {
+  if (!clientIp) return 0;
+  const clean = extractCleanIp(clientIp);
+  if (!clean) return 0;
+
+  try {
+    // 1. Số lần đã được ghi nhận khi vào làm bài
+    let entryCount = 0;
+    const entriesRaw = localStorage.getItem('kiem_tra_thuong_xuyen_ip_entries');
+    if (entriesRaw) {
+      const parsed = JSON.parse(entriesRaw);
+      if (parsed && typeof parsed === 'object') {
+        entryCount = Number(parsed[clean]) || 0;
+      }
+    }
+
+    // 2. Số lần đã hoàn thành và lưu trong lịch sử bài nộp trên máy
+    let historyCount = 0;
+    const raw = localStorage.getItem('kiem_tra_thuong_xuyen_history');
+    if (raw) {
+      const history: SubmissionRecord[] = JSON.parse(raw);
+      if (Array.isArray(history)) {
+        historyCount = history.filter((item) => {
+          const itemIp = extractCleanIp(item.ipAddress);
+          return itemIp && itemIp === clean;
+        }).length;
+      }
+    }
+
+    return Math.max(entryCount, historyCount);
+  } catch (err) {
+    console.warn('Lỗi khi đếm số lần IP làm bài:', err);
+    return 0;
+  }
+}
+
+/**
+ * Kiểm tra xem IP có vi phạm số lần vào làm cho phép hay không
+ */
+export function isIpOverSubmissionLimit(
+  clientIp: string | null | undefined,
+  maxAllowed: number | undefined,
+  enableBlocking = true
+): boolean {
+  if (!enableBlocking) return false;
+  const limit = Number(maxAllowed);
+  if (isNaN(limit) || limit <= 0) return false;
+
+  const count = countIpSubmissionsOnDevice(clientIp);
+  return count >= limit;
+}
+

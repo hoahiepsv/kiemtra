@@ -27,8 +27,16 @@ function doGet(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getActiveSheet(); // Hoặc ss.getSheetByName("data1");
     
-    // 1. Đọc thông tin cấu hình kỳ thi ở Dòng 1
-    // A1: Tên kỳ kiểm tra, B1: Môn, C1: Tên trường, D1: Thời gian làm bài (phút)
+    // 1. Đọc thông tin cấu hình kỳ thi ở Dòng 1:
+    // A1: Tên kỳ kiểm tra (như cũ)
+    // B1: Môn
+    // C1: Tên trường
+    // D1: Thời gian làm bài (phút)
+    // E1: Trạng thái bật/tắt tự động chặn IP vi phạm số lần vào làm (BẬT / TẮT)
+    // F1: Số lần cho phép 1 IP vào làm (số lần)
+    // G1: Bật tắt chế độ hoán đổi câu hỏi trắc nghiệm 1 đáp án (BẬT - BẬT, BẬT - TẮT, TẮT - BẬT, TẮT - TẮT)
+    // H1: Trạng thái bật/tắt hoán vị các câu hỏi đúng/sai (BẬT / TẮT)
+    // I1: Trạng thái bật/tắt hoán vị các câu hỏi tự luận (BẬT / TẮT)
     var examName = sheet.getRange("A1").getValue() || "KIỂM TRA THƯỜNG XUYÊN";
     var subject = sheet.getRange("B1").getValue() || "TIN HỌC 6";
     var schoolName = sheet.getRange("C1").getValue() || "TRƯỜNG THCS VÕ VĂN KIỆT";
@@ -41,11 +49,22 @@ function doGet(e) {
       if (match) durationMinutes = parseInt(match[0], 10);
     }
 
+    var enableIpBlockingVal = sheet.getRange("E1").getValue();
+    var maxSubmissionsVal = sheet.getRange("F1").getValue();
+    var mcShuffleModeVal = sheet.getRange("G1").getValue();
+    var shuffleTrueFalseVal = sheet.getRange("H1").getValue();
+    var shuffleEssayVal = sheet.getRange("I1").getValue();
+
     var config = {
       schoolName: schoolName.toString().trim(),
       examName: examName.toString().trim(),
       subject: subject.toString().trim(),
       durationMinutes: durationMinutes,
+      enableIpBlocking: enableIpBlockingVal !== "" ? (enableIpBlockingVal === true || String(enableIpBlockingVal).trim().toUpperCase() === "BẬT" || String(enableIpBlockingVal).trim().toUpperCase() === "BAT" || String(enableIpBlockingVal).trim().toUpperCase() === "TRUE") : true,
+      maxSubmissionsPerIp: (typeof maxSubmissionsVal === 'number' && maxSubmissionsVal > 0) ? maxSubmissionsVal : (parseInt(maxSubmissionsVal, 10) || 1),
+      mcShuffleMode: mcShuffleModeVal ? String(mcShuffleModeVal).trim() : "BẬT - BẬT",
+      shuffleTrueFalse: shuffleTrueFalseVal !== "" ? (shuffleTrueFalseVal === true || String(shuffleTrueFalseVal).trim().toUpperCase() === "BẬT" || String(shuffleTrueFalseVal).trim().toUpperCase() === "BAT" || String(shuffleTrueFalseVal).trim().toUpperCase() === "TRUE") : true,
+      shuffleEssay: shuffleEssayVal !== "" ? (shuffleEssayVal === true || String(shuffleEssayVal).trim().toUpperCase() === "BẬT" || String(shuffleEssayVal).trim().toUpperCase() === "BAT" || String(shuffleEssayVal).trim().toUpperCase() === "TRUE") : false,
       copyrightText: "Lê Hoà Hiệp - 0983.676.470"
     };
 
@@ -138,13 +157,26 @@ function doPost(e) {
       data = e.parameter || {};
     }
 
-    // 1. Cập nhật thông tin kỳ thi ở Dòng 1
-    // A1: Tên kỳ kiểm tra, B1: Môn, C1: Tên trường, D1: Thời gian làm bài (phút)
+    // 1. Cập nhật thông tin kỳ thi ở Dòng 1:
+    // A1: Tên kỳ kiểm tra (như cũ)
+    // B1: Môn
+    // C1: Tên trường
+    // D1: Thời gian làm bài (phút)
+    // E1: Trạng thái bật/tắt tự động chặn IP vi phạm số lần vào làm (BẬT / TẮT)
+    // F1: Số lần cho phép 1 IP vào làm
+    // G1: Chế độ hoán đổi trắc nghiệm 1 đáp án (BẬT - BẬT, BẬT - TẮT, TẮT - BẬT, TẮT - TẮT)
+    // H1: Trạng thái bật/tắt hoán vị các câu hỏi đúng/sai (BẬT / TẮT)
+    // I1: Trạng thái bật/tắt hoán vị các câu hỏi tự luận (BẬT / TẮT)
     if (data.config) {
       if (data.config.examName !== undefined) sheet.getRange("A1").setValue(data.config.examName);
       if (data.config.subject !== undefined) sheet.getRange("B1").setValue(data.config.subject);
       if (data.config.schoolName !== undefined) sheet.getRange("C1").setValue(data.config.schoolName);
       if (data.config.durationMinutes !== undefined) sheet.getRange("D1").setValue(Number(data.config.durationMinutes) || 15);
+      if (data.config.enableIpBlocking !== undefined) sheet.getRange("E1").setValue(String(data.config.enableIpBlocking).trim());
+      if (data.config.maxSubmissionsPerIp !== undefined) sheet.getRange("F1").setValue(Number(data.config.maxSubmissionsPerIp) || 1);
+      if (data.config.mcShuffleMode !== undefined) sheet.getRange("G1").setValue(String(data.config.mcShuffleMode).trim());
+      if (data.config.shuffleTrueFalse !== undefined) sheet.getRange("H1").setValue(String(data.config.shuffleTrueFalse).trim());
+      if (data.config.shuffleEssay !== undefined) sheet.getRange("I1").setValue(String(data.config.shuffleEssay).trim());
     }
 
     // 2. Cập nhật danh sách câu hỏi từ Dòng 5 trở đi
@@ -1106,11 +1138,22 @@ function doGet(e) {
       if (dMatch) durationMinutes = parseInt(dMatch[0], 10);
     }
 
+    var enableIpBlockingVal = sheet1.getRange("E1").getValue();
+    var maxSubmissionsVal = sheet1.getRange("F1").getValue();
+    var mcShuffleModeVal = sheet1.getRange("G1").getValue();
+    var shuffleTrueFalseVal = sheet1.getRange("H1").getValue();
+    var shuffleEssayVal = sheet1.getRange("I1").getValue();
+
     var examConfig = {
       schoolName: String(schoolName).trim(),
       examName: String(examName).trim(),
       subject: String(subject).trim(),
       durationMinutes: durationMinutes,
+      enableIpBlocking: enableIpBlockingVal !== "" ? (enableIpBlockingVal === true || String(enableIpBlockingVal).trim().toUpperCase() === "BẬT" || String(enableIpBlockingVal).trim().toUpperCase() === "BAT" || String(enableIpBlockingVal).trim().toUpperCase() === "TRUE") : true,
+      maxSubmissionsPerIp: (typeof maxSubmissionsVal === 'number' && maxSubmissionsVal > 0) ? maxSubmissionsVal : (parseInt(maxSubmissionsVal, 10) || 1),
+      mcShuffleMode: mcShuffleModeVal ? String(mcShuffleModeVal).trim() : "BẬT - BẬT",
+      shuffleTrueFalse: shuffleTrueFalseVal !== "" ? (shuffleTrueFalseVal === true || String(shuffleTrueFalseVal).trim().toUpperCase() === "BẬT" || String(shuffleTrueFalseVal).trim().toUpperCase() === "BAT" || String(shuffleTrueFalseVal).trim().toUpperCase() === "TRUE") : true,
+      shuffleEssay: shuffleEssayVal !== "" ? (shuffleEssayVal === true || String(shuffleEssayVal).trim().toUpperCase() === "BẬT" || String(shuffleEssayVal).trim().toUpperCase() === "BAT" || String(shuffleEssayVal).trim().toUpperCase() === "TRUE") : false,
       copyrightText: "Lê Hoà Hiệp - 0983.676.470"
     };
 
@@ -1203,12 +1246,19 @@ function doPost(e) {
     if (data.action === "saveExam" || (data.questions && Array.isArray(data.questions))) {
       var sheet1 = ss.getSheetByName("data1") || ss.getActiveSheet();
 
-      // Cập nhật cấu hình Dòng 1
+      // Cập nhật cấu hình Dòng 1:
+      // A1: Tên kỳ kiểm tra, B1: Môn, C1: Tên trường, D1: Thời gian làm bài (phút)
+      // E1: Bật/tắt chặn IP theo số lần, F1: Số lần cho phép, G1: Hoán đổi TN 1 đáp án, H1: Hoán vị Đúng/Sai, I1: Hoán vị Tự luận
       if (data.config) {
         if (data.config.examName !== undefined) sheet1.getRange("A1").setValue(data.config.examName);
         if (data.config.subject !== undefined) sheet1.getRange("B1").setValue(data.config.subject);
         if (data.config.schoolName !== undefined) sheet1.getRange("C1").setValue(data.config.schoolName);
         if (data.config.durationMinutes !== undefined) sheet1.getRange("D1").setValue(Number(data.config.durationMinutes) || 15);
+        if (data.config.enableIpBlocking !== undefined) sheet1.getRange("E1").setValue(String(data.config.enableIpBlocking).trim());
+        if (data.config.maxSubmissionsPerIp !== undefined) sheet1.getRange("F1").setValue(Number(data.config.maxSubmissionsPerIp) || 1);
+        if (data.config.mcShuffleMode !== undefined) sheet1.getRange("G1").setValue(String(data.config.mcShuffleMode).trim());
+        if (data.config.shuffleTrueFalse !== undefined) sheet1.getRange("H1").setValue(String(data.config.shuffleTrueFalse).trim());
+        if (data.config.shuffleEssay !== undefined) sheet1.getRange("I1").setValue(String(data.config.shuffleEssay).trim());
       }
 
       // Cập nhật danh sách câu hỏi từ Dòng 5 trở đi
