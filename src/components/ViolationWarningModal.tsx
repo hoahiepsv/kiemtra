@@ -35,6 +35,7 @@ import { SubmissionRecord, ExamConfig } from '../types';
 import {
   detectIpViolations,
   IpViolationGroup,
+  sortIpViolations,
   extractCleanIp,
   formatBlockedIpString,
   isIpBlockedCheck,
@@ -67,6 +68,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'same_student' | 'shared_ip'>('all');
+  const [sortMode, setSortMode] = useState<'newest' | 'count_desc' | 'oldest'>('newest');
   const [copiedIp, setCopiedIp] = useState<string | null>(null);
 
   // Trạng thái nhập thủ công IP cần chặn
@@ -355,9 +357,9 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
     return detectIpViolations(history || []);
   }, [history]);
 
-  // Filter groups based on search & tab filter
+  // Filter groups based on search & tab filter, and sort by selected sortMode (default newest)
   const filteredGroups = useMemo(() => {
-    return violationGroups.filter((group) => {
+    const list = violationGroups.filter((group) => {
       // Type filter
       if (filterType === 'same_student' && !group.isSameStudentMultipleTimes) return false;
       if (filterType === 'shared_ip' && !group.isMultipleStudentsSharedIp) return false;
@@ -372,7 +374,9 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
 
       return false;
     });
-  }, [violationGroups, filterType, searchTerm]);
+
+    return sortIpViolations(list, sortMode);
+  }, [violationGroups, filterType, searchTerm, sortMode]);
 
   // Total metrics
   const totalViolatingIps = violationGroups.length;
@@ -398,21 +402,25 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
 
   // Export violations to Excel
   const handleExportExcel = () => {
-    if (violationGroups.length === 0) return;
+    const targetGroups = filteredGroups.length > 0 ? filteredGroups : violationGroups;
+    if (targetGroups.length === 0) return;
 
     const rows: Array<Record<string, string | number>> = [];
     let stt = 1;
 
-    violationGroups.forEach((g) => {
+    targetGroups.forEach((g) => {
       const isBlocked = isIpBlockedCheck(g.ipAddress, blockedIpsList, true);
       const cleanIp = extractCleanIp(g.ipAddress);
 
       g.submissions.forEach((sub, subIdx) => {
+        const isLatestAttempt = subIdx === g.submissions.length - 1;
         rows.push({
           'STT': stt++,
           'Địa chỉ IP': cleanIp,
           'Trạng thái': isBlocked ? 'Chặn' : '',
           'Lần nộp từ IP': `Lần ${subIdx + 1} / ${g.submissionCount}`,
+          'Thời gian vi phạm mới nhất': g.latestViolationTimeFormatted || '',
+          'Dấu hiệu': isLatestAttempt ? 'Lần vi phạm mới nhất' : 'Lần làm trước đó',
           'Họ và tên học sinh': sub.studentName,
           'Lớp': sub.className,
           'Số điểm': Number(sub.totalScore) || 0,
@@ -823,24 +831,43 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
             </button>
           </div>
 
-          {/* Search Input */}
-          <div className="relative flex-1 sm:w-60">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Tìm theo IP, tên HS, lớp..."
-              className="w-full pl-8 pr-6 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-rose-500 text-xs bg-slate-50/50"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+          {/* Right side: Sort mode & Search input */}
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
+            {/* Bộ chọn sắp xếp: Mới nhất (Mặc định) */}
+            <div className="flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-100/90 hover:bg-slate-200/80 px-2 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border border-slate-200 transition-colors">
+              <Clock className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+              <span className="hidden md:inline whitespace-nowrap text-slate-500 font-semibold">Sắp xếp:</span>
+              <select
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as any)}
+                className="bg-transparent font-bold text-slate-800 text-[11px] focus:outline-none cursor-pointer"
+                title="Sắp xếp danh sách vi phạm"
               >
-                ×
-              </button>
-            )}
+                <option value="newest">Mới nhất (Mặc định)</option>
+                <option value="count_desc">Nhiều vi phạm nhất</option>
+                <option value="oldest">Cũ nhất</option>
+              </select>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative flex-1 sm:w-56">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Tìm theo IP, tên HS, lớp..."
+                className="w-full pl-8 pr-6 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-rose-500 text-xs bg-slate-50/50"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -985,6 +1012,14 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                      {/* Hiển thị thời gian vi phạm mới nhất */}
+                      {group.latestViolationTimeFormatted && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-rose-100 text-rose-900 border border-rose-300 flex items-center gap-1 shadow-2xs">
+                          <Clock className="w-3 h-3 text-rose-600 flex-shrink-0" />
+                          <span>Vi phạm mới nhất: <strong className="font-mono">{group.latestViolationTimeFormatted}</strong></span>
+                        </span>
+                      )}
+
                       {isSameStudent ? (
                         <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
                           <UserCheck className="w-3 h-3" />
@@ -1099,10 +1134,15 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                                   {sub.className}
                                 </span>
                               </div>
-                              <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                              <div className="text-[10px] text-slate-500 flex items-center gap-1.5 mt-0.5 flex-wrap">
                                 <Clock className="w-2.5 h-2.5 text-slate-400" />
                                 <span>{sub.endTime || sub.startTime || 'Chưa ghi nhận'}</span>
                                 {sub.totalDuration && <span>• {sub.totalDuration}</span>}
+                                {sIdx === group.submissions.length - 1 && (
+                                  <span className="px-1.5 py-0.2 rounded bg-rose-600 text-white font-bold text-[8px] uppercase tracking-tight shadow-2xs">
+                                    Mới nhất
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1176,10 +1216,15 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                                 </span>
                               </td>
                               <td className="py-2.5 px-4 text-slate-600 font-mono text-[11px]">
-                                <span className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <Clock className="w-3 h-3 text-slate-400" />
-                                  {sub.endTime || sub.startTime || 'Chưa ghi nhận'}
-                                </span>
+                                  <span>{sub.endTime || sub.startTime || 'Chưa ghi nhận'}</span>
+                                  {sIdx === group.submissions.length - 1 && (
+                                    <span className="px-1.5 py-0.2 rounded bg-rose-600 text-white font-bold text-[9px] uppercase tracking-tight shadow-2xs">
+                                      Mới nhất
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="py-2.5 px-4 text-center text-slate-600 font-mono text-[11px]">
                                 {sub.totalDuration || '--:--'}
@@ -1358,6 +1403,11 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                             <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
                               ({group.submissionCount} bài)
                             </span>
+                            {group.latestViolationTimeFormatted && (
+                              <span className="block text-[9px] font-semibold text-rose-700 mt-0.5">
+                                Mới nhất: {group.latestViolationTimeFormatted}
+                              </span>
+                            )}
                           </td>
                           <td
                             rowSpan={group.submissions.length}
@@ -1384,7 +1434,12 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
                         {sub.totalScore} đ
                       </td>
                       <td className="p-2 border border-slate-200 text-center font-mono text-slate-600 text-[11px]">
-                        {sub.endTime || sub.startTime || '-'}
+                        <span>{sub.endTime || sub.startTime || '-'}</span>
+                        {sIdx === group.submissions.length - 1 && (
+                          <span className="ml-1 px-1 py-0.2 rounded bg-rose-600 text-white font-bold text-[8px] uppercase">
+                            Mới nhất
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );

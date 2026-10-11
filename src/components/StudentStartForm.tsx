@@ -3,8 +3,9 @@ import { Play, Clock, BookOpen, School, AlertCircle, Sparkles, RotateCcw, CheckC
 import { ExamConfig, DraftExam, Question } from '../types';
 import { fetchClientIp } from '../utils/ipService';
 import { formatStudentName, formatClassName } from '../utils/studentFormatting';
-import { isIpBlockedCheck, isIpOverSubmissionLimit } from '../utils/ipViolationService';
+import { isIpBlockedCheck, isIpOverSubmissionLimit, checkAndResetPeriodOnDevice } from '../utils/ipViolationService';
 import { checkLiveIpBlockedOnSheet } from '../utils/syncService';
+import { checkExamDateStatus, getExamPeriodKey } from '../utils/examDateService';
 
 interface StudentStartFormProps {
   config: ExamConfig;
@@ -55,12 +56,33 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
   const [isLoadingIp, setIsLoadingIp] = useState<boolean>(true);
   const [isCheckingSecurity, setIsCheckingSecurity] = useState<boolean>(false);
 
+  // Phân tích trạng thái ngày làm bài (ô D3) và khóa định danh kỳ kiểm tra
+  const dateStatus = useMemo(() => checkExamDateStatus(config.examDateRange), [config.examDateRange]);
+  const examPeriodKey = useMemo(
+    () => getExamPeriodKey(config),
+    [config.examDateRange, config.examName, config.subject]
+  );
+  // Kỳ thi chỉ mở khi: Không bị tắt thủ công (J1) VÀ đang trong hạn ngày thi (D3)
+  const isEffectiveExamActive = config.isExamActive !== false && dateStatus.isExamAllowed;
+
+  // Tự động nhận diện thay đổi kỳ kiểm tra để tính lại số lần từ đầu cho học sinh
+  useEffect(() => {
+    checkAndResetPeriodOnDevice(examPeriodKey);
+  }, [examPeriodKey]);
+
   // Tra soát tức thời trong RAM và JSON lịch sử trên máy xem IP thiết bị này có bị Giáo viên chặn hoặc vượt quá số lần làm bài hay không
   const isDeviceBlocked = useMemo(() => {
+    if (!isEffectiveExamActive) return false;
     const isManuallyBlocked = isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true);
-    const isOverLimit = isIpOverSubmissionLimit(clientIp, config.maxSubmissionsPerIp, config.enableIpBlocking ?? true);
+    const isOverLimit = isIpOverSubmissionLimit(
+      clientIp,
+      config.maxSubmissionsPerIp,
+      config.enableIpBlocking ?? true,
+      config.examDateRange,
+      examPeriodKey
+    );
     return isManuallyBlocked || isOverLimit;
-  }, [clientIp, config.blockedIps, config.enableIpBlocking, config.maxSubmissionsPerIp]);
+  }, [clientIp, config.blockedIps, config.enableIpBlocking, config.maxSubmissionsPerIp, config.examDateRange, examPeriodKey, isEffectiveExamActive]);
 
   // Kiểm tra 1 lần duy nhất ngay khi mở ứng dụng xem SBD/IP này có bị chặn hay không
   useEffect(() => {
@@ -72,7 +94,7 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
 
       if (ip && config.data2Url && config.enableIpBlocking !== false) {
         try {
-          const liveCheck = await checkLiveIpBlockedOnSheet(config.data2Url, ip);
+          const liveCheck = await checkLiveIpBlockedOnSheet(config.data2Url, ip, config.examDateRange);
           if (isMounted && onUpdateBlockedIps) {
             onUpdateBlockedIps(liveCheck.blockedList);
           }
@@ -82,7 +104,7 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [config.data2Url, config.enableIpBlocking, onUpdateBlockedIps]);
+  }, [config.data2Url, config.enableIpBlocking, config.examDateRange, onUpdateBlockedIps]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,8 +137,8 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
       } catch {}
     }
 
-    // 1.1. Kiểm tra giới hạn số lần làm bài trên thiết bị (F1)
-    if (isIpOverSubmissionLimit(currentCheckIp, config.maxSubmissionsPerIp, config.enableIpBlocking ?? true)) {
+    // 1.1. Kiểm tra giới hạn số lần làm bài trên thiết bị (F1) theo kỳ kiểm tra hiện tại (D3)
+    if (isIpOverSubmissionLimit(currentCheckIp, config.maxSubmissionsPerIp, config.enableIpBlocking ?? true, config.examDateRange, examPeriodKey)) {
       setIsCheckingSecurity(false);
       setErrorMessage(
         `⛔ Thí sinh (SBD: ${currentCheckIp || clientIp || 'SBD'}) đã bị tạm khóa vì đã vi phạm quy định làm quá số lần cho phép (${config.maxSubmissionsPerIp || 1} lần)!`
@@ -128,7 +150,7 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
     // Google Sheet là nguồn chân lý duy nhất, giải quyết triệt để lỗi mở chặn nhưng máy HS không vào được
     if (config.data2Url && config.enableIpBlocking !== false && currentCheckIp) {
       try {
-        const liveCheck = await checkLiveIpBlockedOnSheet(config.data2Url, currentCheckIp);
+        const liveCheck = await checkLiveIpBlockedOnSheet(config.data2Url, currentCheckIp, config.examDateRange);
         // Đồng bộ danh sách mới nhất về máy học sinh (nếu mở chặn, danh sách sẽ không còn IP này)
         if (onUpdateBlockedIps) {
           onUpdateBlockedIps(liveCheck.blockedList);
@@ -201,7 +223,7 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
       )}
 
       {/* Draft Recovery Alert */}
-      {existingDraft && (
+      {existingDraft && config.isExamActive !== false && (
         <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-start gap-3">
             <div className="p-2 rounded-lg bg-amber-100 text-amber-700 flex-shrink-0 mt-0.5">
@@ -216,7 +238,7 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 self-end sm:self-center">
+          <div className="flex items-center gap-2 self-end sm:flex-center">
             <button
               onClick={onDiscardDraft}
               type="button"
@@ -236,10 +258,31 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
         </div>
       )}
 
-      {/* Main Start Card */}
-      <div className="bg-white rounded-2xl border border-sky-100 shadow-sm overflow-hidden">
-        {/* Card Header with Soft Gradient - Thu gọn theo yêu cầu */}
-        <div className="bg-gradient-to-r from-sky-600 via-sky-700 to-blue-700 px-3.5 py-2.5 sm:px-5 sm:py-3 text-white">
+      {/* Thông báo khi bài kiểm tra ở trạng thái TẮT (thủ công ở ô J1 hoặc tự động tắt sau ngày hết hạn D3) */}
+      {!isEffectiveExamActive ? (
+        <div className="bg-white rounded-3xl border-2 border-slate-200/90 shadow-xl p-8 sm:p-12 text-center max-w-lg mx-auto animate-in fade-in zoom-in-95">
+          <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-3xl border border-amber-200/60 flex items-center justify-center mx-auto mb-5 shadow-inner">
+            <AlertCircle className="w-10 h-10" />
+          </div>
+          <h3 className="text-lg sm:text-xl font-black text-slate-800 tracking-tight uppercase mb-3">
+            HIỆN TẠI KHÔNG CÓ BÀI KIỂM TRA NÀO
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-500 font-medium mb-6 leading-relaxed">
+            {dateStatus.status === 'expired'
+              ? `Kỳ kiểm tra đã kết thúc vào ngày ${dateStatus.endDateFormatted} (Hệ thống đã tự động đóng bài kiểm tra). Học sinh vui lòng đợi giáo viên thông báo mở bài kiểm tra hoặc chọn đợt thi mới!`
+              : dateStatus.status === 'not_started'
+              ? `Chưa đến thời gian làm bài kiểm tra (Thời gian mở từ ngày: ${dateStatus.startDateFormatted}). Học sinh vui lòng quay lại sau!`
+              : 'Hệ thống bài kiểm tra hiện đang tạm đóng. Học sinh vui lòng đợi giáo viên thông báo mở bài kiểm tra!'}
+          </p>
+          <div className="mt-8 pt-4 border-t border-slate-100 text-center text-[11px] text-slate-400">
+            {config.schoolName} • Bản quyền: {config.copyrightText}
+          </div>
+        </div>
+      ) : (
+        /* Main Start Card */
+        <div className="bg-white rounded-2xl border border-sky-100 shadow-sm overflow-hidden">
+          {/* Card Header with Soft Gradient - Thu gọn theo yêu cầu */}
+          <div className="bg-gradient-to-r from-sky-600 via-sky-700 to-blue-700 px-3.5 py-2.5 sm:px-5 sm:py-3 text-white">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 text-sky-100 text-[10px] sm:text-xs font-semibold mb-0.5">
@@ -419,6 +462,7 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
           <strong className="text-slate-700 font-semibold">{config.copyrightText}</strong>
         </div>
       </div>
+      )}
     </div>
   );
 };

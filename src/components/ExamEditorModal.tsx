@@ -30,6 +30,13 @@ import {
   parseAcceptableAnswers,
   joinAcceptableAnswers,
 } from '../utils/gradeService';
+import {
+  checkExamDateStatus,
+  parseExamDateRange,
+  formatDateToInputYmd,
+  buildExamDateRangeString,
+  parseSingleDate,
+} from '../utils/examDateService';
 import { EssayAnswerEditor } from './EssayAnswerEditor';
 
 interface ExamEditorModalProps {
@@ -55,6 +62,12 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
   const [subject, setSubject] = useState(config.subject || '');
   const [durationMinutes, setDurationMinutes] = useState<number>(config.durationMinutes || 15);
   const [data1Url, setData1Url] = useState(config.data1Url || '');
+  const [examDateRange, setExamDateRange] = useState<string>(config.examDateRange || '29/09/2026 - 12/10/2026');
+  const parsedRange = useMemo(() => parseExamDateRange(examDateRange), [examDateRange]);
+  const [startDateInput, setStartDateInput] = useState<string>(() => formatDateToInputYmd(parsedRange.startDate));
+  const [endDateInput, setEndDateInput] = useState<string>(() => formatDateToInputYmd(parsedRange.endDate));
+  const examDateStatus = useMemo(() => checkExamDateStatus(examDateRange), [examDateRange]);
+
   const [enableIpBlocking, setEnableIpBlocking] = useState<boolean>(config.enableIpBlocking ?? true);
   const [maxSubmissionsPerIp, setMaxSubmissionsPerIp] = useState<number>(config.maxSubmissionsPerIp ?? 1);
   const [mcShuffleMode, setMcShuffleMode] = useState<'BAT_BAT' | 'BAT_TAT' | 'TAT_BAT' | 'TAT_TAT'>(
@@ -62,9 +75,43 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
   );
   const [shuffleTrueFalse, setShuffleTrueFalse] = useState<boolean>(config.shuffleTrueFalse ?? true);
   const [shuffleEssay, setShuffleEssay] = useState<boolean>(config.shuffleEssay ?? false);
+  const [isExamActive, setIsExamActive] = useState<boolean>(config.isExamActive ?? true);
   const [blockedIpsList, setBlockedIpsList] = useState<string[]>(config.blockedIps || []);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatusMsg, setSaveStatusMsg] = useState<string | null>(null);
+
+  // Xử lý thay đổi ngày kiểm tra (ô D3)
+  const handleDateChange = (newStartStr: string, newEndStr: string) => {
+    setStartDateInput(newStartStr);
+    setEndDateInput(newEndStr);
+    const startObj = parseSingleDate(newStartStr, false);
+    const endObj = parseSingleDate(newEndStr, true);
+    const newRangeStr = buildExamDateRangeString(startObj, endObj);
+    setExamDateRange(newRangeStr);
+
+    // Nút chỉnh Trạng thái kiểm tra phụ thuộc vào ngày chọn:
+    // Nếu ngày kết thúc đã qua (hết hạn) -> tự động chuyển sang TẮT!
+    const newStatus = checkExamDateStatus(newRangeStr);
+    if (newStatus.status === 'expired') {
+      setIsExamActive(false);
+    } else if (newStatus.status === 'active') {
+      setIsExamActive(true);
+    }
+  };
+
+  const handleRangeTextChange = (text: string) => {
+    setExamDateRange(text);
+    const pr = parseExamDateRange(text);
+    if (pr.startDate) setStartDateInput(formatDateToInputYmd(pr.startDate));
+    if (pr.endDate) setEndDateInput(formatDateToInputYmd(pr.endDate));
+    const newStatus = checkExamDateStatus(text);
+    if (newStatus.status === 'expired') {
+      setIsExamActive(false);
+    } else if (newStatus.status === 'active') {
+      setIsExamActive(true);
+    }
+  };
+
 
   // Questions state (local copy for editing)
   const [questionList, setQuestionList] = useState<Question[]>([]);
@@ -101,12 +148,27 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
       setExamName(config.examName || '');
       setSubject(config.subject || '');
       setDurationMinutes(config.durationMinutes || 15);
+      const initialRange = config.examDateRange || '29/09/2026 - 12/10/2026';
+      setExamDateRange(initialRange);
+      const pr = parseExamDateRange(initialRange);
+      setStartDateInput(formatDateToInputYmd(pr.startDate));
+      setEndDateInput(formatDateToInputYmd(pr.endDate));
+
       setData1Url(config.data1Url || '');
       setEnableIpBlocking(config.enableIpBlocking ?? true);
       setMaxSubmissionsPerIp(config.maxSubmissionsPerIp ?? 1);
       setMcShuffleMode(config.mcShuffleMode || 'BAT_BAT');
       setShuffleTrueFalse(config.shuffleTrueFalse ?? true);
       setShuffleEssay(config.shuffleEssay ?? false);
+
+      // Phụ thuộc vào ngày: nếu đã hết hạn, tự động TẮT
+      const ds = checkExamDateStatus(initialRange);
+      if (ds.status === 'expired') {
+        setIsExamActive(false);
+      } else {
+        setIsExamActive(config.isExamActive ?? true);
+      }
+
       setBlockedIpsList(config.blockedIps || []);
 
       // Deep clone questions
@@ -332,18 +394,23 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
       }
     }
 
+    const dateStatus = checkExamDateStatus(examDateRange);
+    const finalIsExamActive = dateStatus.status === 'expired' ? false : isExamActive;
+
     const updatedConfig: ExamConfig = {
       ...config,
       schoolName: schoolName.trim(), // C1
       examName: examName.trim(), // A1
       subject: subject.trim(), // B1
       durationMinutes: Number(durationMinutes), // D1
+      examDateRange: examDateRange.trim(), // D3: Khoảng thời gian cho phép làm kiểm tra
       data1Url: normalizeAppsScriptUrl(data1Url),
       enableIpBlocking, // E1
       maxSubmissionsPerIp: Math.max(1, parseInt(String(maxSubmissionsPerIp), 10) || 1), // F1
       mcShuffleMode, // G1
       shuffleTrueFalse, // H1
       shuffleEssay, // I1
+      isExamActive: finalIsExamActive, // J1 (phụ thuộc vào ngày: nếu đã hết hạn, tự động TẮT)
       shuffleQuestions: mcShuffleMode === 'BAT_BAT' || mcShuffleMode === 'BAT_TAT',
       shuffleOptions: mcShuffleMode === 'BAT_BAT' || mcShuffleMode === 'TAT_BAT',
       blockedIps: blockedIpsList,
@@ -582,6 +649,62 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                   </div>
                 </div>
 
+                {/* D3: Khoảng thời gian cho phép làm kiểm tra - Trình bày hàng ngang, không chú thích */}
+                <div className="col-span-full p-2.5 sm:p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+                    {/* Tiêu đề & Huy hiệu trạng thái */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <label className="font-bold text-slate-800 text-xs sm:text-sm whitespace-nowrap">
+                        Khoảng thời gian cho phép làm kiểm tra:
+                      </label>
+                      {examDateStatus.status === 'active' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          🟢 Đang mở
+                        </span>
+                      )}
+                      {examDateStatus.status === 'expired' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                          🔴 Đã hết hạn ({examDateStatus.endDateFormatted})
+                        </span>
+                      )}
+                      {examDateStatus.status === 'not_started' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                          🟡 Chưa mở ({examDateStatus.startDateFormatted})
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Hàng ngang: Ô chọn ngày, ô chuỗi D3 & nút chọn nhanh */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">Từ:</span>
+                        <input
+                          type="date"
+                          value={startDateInput}
+                          onChange={(e) => handleDateChange(e.target.value, endDateInput)}
+                          className="px-2.5 py-1.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-semibold text-xs text-slate-800 bg-white"
+                        />
+                        <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">Đến:</span>
+                        <input
+                          type="date"
+                          value={endDateInput}
+                          onChange={(e) => handleDateChange(startDateInput, e.target.value)}
+                          className="px-2.5 py-1.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-semibold text-xs text-slate-800 bg-white"
+                        />
+                      </div>
+
+                      <input
+                        type="text"
+                        value={examDateRange}
+                        onChange={(e) => handleRangeTextChange(e.target.value)}
+                        placeholder="29/09/2026 - 12/10/2026"
+                        className="w-44 sm:w-52 px-2.5 py-1.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-mono font-bold text-xs text-slate-800 bg-white text-center"
+                      />
+
+                    </div>
+                  </div>
+                </div>
+
                 {/* E1: Trạng thái bật/tắt tự động chặn IP vi phạm số lần vào làm */}
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
@@ -657,6 +780,34 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                     <option value="BAT">BẬT</option>
                     <option value="TAT">TẮT</option>
                   </select>
+                </div>
+
+                {/* J1: Trạng thái kiểm tra: Bật / Tắt (Phụ thuộc vào ngày chọn) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">
+                      Trạng thái kiểm tra:
+                    </label>
+                    {examDateStatus.status === 'expired' && (
+                      <span className="text-[11px] font-bold text-rose-600">
+                        (Đã hết hạn ngày thi ➔ Tự động khóa TẮT)
+                      </span>
+                    )}
+                  </div>
+                  <select
+                    value={isExamActive ? 'BAT' : 'TAT'}
+                    disabled={examDateStatus.status === 'expired'}
+                    onChange={(e) => setIsExamActive(e.target.value === 'BAT')}
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-semibold text-slate-800 ${
+                      examDateStatus.status === 'expired'
+                        ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                        : 'bg-white border-slate-300'
+                    }`}
+                  >
+                    <option value="BAT">BẬT</option>
+                    <option value="TAT">TẮT</option>
+                  </select>
+
                 </div>
               </div>
             )}
