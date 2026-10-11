@@ -20,6 +20,7 @@ export interface ExamConfig {
   examName: string; // KIỂM TRA ĐỊNH KỲ / KIỂM TRA THƯỜNG XUYÊN
   subject: string; // MÔN: TIN HỌC 6
   durationMinutes: number; // THỜI GIAN LÀM BÀI: 15
+  examDateRange?: string; // D3: Khoảng thời gian cho phép làm kiểm tra (vd: 29/09/2026 - 12/10/2026)
   copyrightText: string; // Lê Hoà Hiệp - 0983.676.470
   data1Url?: string;
   data2Url?: string;
@@ -30,6 +31,7 @@ export interface ExamConfig {
   mcShuffleMode?: 'BAT_BAT' | 'BAT_TAT' | 'TAT_BAT' | 'TAT_TAT'; // G1: Chế độ hoán đổi trắc nghiệm 1 đáp án
   shuffleTrueFalse?: boolean; // H1: Bật/tắt hoán vị các câu hỏi đúng/sai
   shuffleEssay?: boolean; // I1: Bật/tắt hoán vị các câu hỏi tự luận
+  isExamActive?: boolean; // J1: Trạng thái bật/tắt kiểm tra (Bật / Tắt)
   blockedIps?: string[]; // Danh sách các IP bị chặn
 }
 

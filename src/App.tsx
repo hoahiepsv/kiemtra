@@ -79,6 +79,8 @@ export default function App() {
         const parsed = JSON.parse(saved);
         const isOldData1 =
           !parsed.data1Url ||
+          parsed.data1Url.includes('AKfycbzcuZEmbhArp9cY73a0hitetmi7eBoWBzYPX0voJXS5pb4YmZpMW5zHXR5K3bgW6TpZAg') ||
+          parsed.data1Url.includes('AKfycbzNg9PzMUEAXXcvHhOFhtNr_1TgehE4carQ335h7oDno1FyrddqsH0sBA5yw2d5IOohCQ') ||
           parsed.data1Url.includes('AKfycbzVR-FeTa2IZ20Nodk3ts3TUJqiadghILLCzyc8NZ6EAqzECm9gSbFVvA4EBmmOMpCO2A') ||
           parsed.data1Url.includes('AKfycbz9zQcN3CuaLsjyHEQeNiR5vJv_gfWhwBKDFL35k-q5VVQQwr0yBqBPCbyE1OF1A86jsw') ||
           parsed.data1Url.includes('AKfycbxdxVRbNGgLoTtofRU9BeB8NLxQyU3z2dAmiGndNwOjJ8T9NzioN0VsVTaipKwg8KBOpw');
@@ -166,8 +168,8 @@ export default function App() {
             const updated = syncSubmissionsFromSheetToHistory(sheetData);
             setHistoryList(updated);
 
-            // Tự động quét và đồng bộ các IP bị chặn từ Google Sheets data2 (nguồn chính xác duy nhất)
-            const blockedFromSheet = extractBlockedIpsFromSubmissions(sheetData);
+            // Tự động quét và đồng bộ các IP bị chặn từ Google Sheets data2 (chỉ tính bài nộp trong kỳ kiểm tra hiện tại D3)
+            const blockedFromSheet = extractBlockedIpsFromSubmissions(sheetData, config.examDateRange);
             const cleanBlockedFromSheet = Array.from(new Set(blockedFromSheet.map(extractCleanIp).filter(Boolean)));
             setConfig((prev) => {
               const nextConfig = { ...prev, blockedIps: cleanBlockedFromSheet };
@@ -178,7 +180,7 @@ export default function App() {
         })
         .catch(() => {});
     }
-  }, [config.data2Url]);
+  }, [config.data2Url, config.examDateRange]);
 
   const handleAuthorClick = () => {
     if (adminSession) {
@@ -196,8 +198,8 @@ export default function App() {
       const updated = syncSubmissionsFromSheetToHistory(sheetData || []);
       setHistoryList(updated);
 
-      // Quét và đồng bộ các IP bị chặn từ sheet (cho phép mở chặn nếu trên sheet đã gỡ)
-      const blockedFromSheet = extractBlockedIpsFromSubmissions(sheetData || []);
+      // Quét và đồng bộ các IP bị chặn từ sheet (chỉ tính bài nộp trong kỳ kiểm tra D3)
+      const blockedFromSheet = extractBlockedIpsFromSubmissions(sheetData || [], config.examDateRange);
       const cleanBlockedFromSheet = Array.from(new Set(blockedFromSheet.map(extractCleanIp).filter(Boolean)));
       setConfig((prev) => {
         const nextConfig = { ...prev, blockedIps: cleanBlockedFromSheet };
@@ -416,6 +418,11 @@ export default function App() {
 
   // 3. Start Exam Action
   const handleStartExam = async (name: string, cls: string) => {
+    if (config.isExamActive === false) {
+      alert('HIỆN TẠI KHÔNG CÓ BÀI KIỂM TRA NÀO');
+      return;
+    }
+
     // Kiểm tra chốt chặn an toàn địa chỉ IP trước khi cho vào phòng thi
     try {
       const clientIp = await fetchClientIp();
@@ -478,6 +485,10 @@ export default function App() {
   // Resume Draft
   const handleResumeDraft = async () => {
     if (!existingDraft) return;
+    if (config.isExamActive === false) {
+      alert('HIỆN TẠI KHÔNG CÓ BÀI KIỂM TRA NÀO');
+      return;
+    }
     try {
       const clientIp = await fetchClientIp();
       if (
