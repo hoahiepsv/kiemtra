@@ -54,17 +54,21 @@ function doGet(e) {
     var mcShuffleModeVal = sheet.getRange("G1").getValue();
     var shuffleTrueFalseVal = sheet.getRange("H1").getValue();
     var shuffleEssayVal = sheet.getRange("I1").getValue();
+    var isExamActiveVal = sheet.getRange("J1").getValue();
+    var examDateRangeVal = sheet.getRange("D3").getValue();
 
     var config = {
       schoolName: schoolName.toString().trim(),
       examName: examName.toString().trim(),
       subject: subject.toString().trim(),
       durationMinutes: durationMinutes,
+      examDateRange: String(examDateRangeVal || "").trim(), // D3: Khoảng thời gian cho phép làm kiểm tra (vd: 29/09/2026 - 12/10/2026)
       enableIpBlocking: enableIpBlockingVal !== "" ? (enableIpBlockingVal === true || String(enableIpBlockingVal).trim().toUpperCase() === "BẬT" || String(enableIpBlockingVal).trim().toUpperCase() === "BAT" || String(enableIpBlockingVal).trim().toUpperCase() === "TRUE") : true,
       maxSubmissionsPerIp: (typeof maxSubmissionsVal === 'number' && maxSubmissionsVal > 0) ? maxSubmissionsVal : (parseInt(maxSubmissionsVal, 10) || 1),
       mcShuffleMode: mcShuffleModeVal ? String(mcShuffleModeVal).trim() : "BẬT - BẬT",
       shuffleTrueFalse: shuffleTrueFalseVal !== "" ? (shuffleTrueFalseVal === true || String(shuffleTrueFalseVal).trim().toUpperCase() === "BẬT" || String(shuffleTrueFalseVal).trim().toUpperCase() === "BAT" || String(shuffleTrueFalseVal).trim().toUpperCase() === "TRUE") : true,
       shuffleEssay: shuffleEssayVal !== "" ? (shuffleEssayVal === true || String(shuffleEssayVal).trim().toUpperCase() === "BẬT" || String(shuffleEssayVal).trim().toUpperCase() === "BAT" || String(shuffleEssayVal).trim().toUpperCase() === "TRUE") : false,
+      isExamActive: isExamActiveVal !== "" ? (String(isExamActiveVal).trim().toUpperCase() !== "TẮT" && String(isExamActiveVal).trim().toUpperCase() !== "TAT" && String(isExamActiveVal).trim().toUpperCase() !== "FALSE" && String(isExamActiveVal).trim().toUpperCase() !== "OFF") : true,
       copyrightText: "Lê Hoà Hiệp - 0983.676.470"
     };
 
@@ -167,16 +171,19 @@ function doPost(e) {
     // G1: Chế độ hoán đổi trắc nghiệm 1 đáp án (BẬT - BẬT, BẬT - TẮT, TẮT - BẬT, TẮT - TẮT)
     // H1: Trạng thái bật/tắt hoán vị các câu hỏi đúng/sai (BẬT / TẮT)
     // I1: Trạng thái bật/tắt hoán vị các câu hỏi tự luận (BẬT / TẮT)
+    // J1: Trạng thái bật/tắt kiểm tra (Bật / Tắt)
     if (data.config) {
       if (data.config.examName !== undefined) sheet.getRange("A1").setValue(data.config.examName);
       if (data.config.subject !== undefined) sheet.getRange("B1").setValue(data.config.subject);
       if (data.config.schoolName !== undefined) sheet.getRange("C1").setValue(data.config.schoolName);
       if (data.config.durationMinutes !== undefined) sheet.getRange("D1").setValue(Number(data.config.durationMinutes) || 15);
+      if (data.config.examDateRange !== undefined) sheet.getRange("D3").setValue(String(data.config.examDateRange).trim());
       if (data.config.enableIpBlocking !== undefined) sheet.getRange("E1").setValue(String(data.config.enableIpBlocking).trim());
       if (data.config.maxSubmissionsPerIp !== undefined) sheet.getRange("F1").setValue(Number(data.config.maxSubmissionsPerIp) || 1);
       if (data.config.mcShuffleMode !== undefined) sheet.getRange("G1").setValue(String(data.config.mcShuffleMode).trim());
       if (data.config.shuffleTrueFalse !== undefined) sheet.getRange("H1").setValue(String(data.config.shuffleTrueFalse).trim());
       if (data.config.shuffleEssay !== undefined) sheet.getRange("I1").setValue(String(data.config.shuffleEssay).trim());
+      if (data.config.isExamActive !== undefined) sheet.getRange("J1").setValue(String(data.config.isExamActive).trim());
     }
 
     // 2. Cập nhật danh sách câu hỏi từ Dòng 5 trở đi
@@ -1143,17 +1150,21 @@ function doGet(e) {
     var mcShuffleModeVal = sheet1.getRange("G1").getValue();
     var shuffleTrueFalseVal = sheet1.getRange("H1").getValue();
     var shuffleEssayVal = sheet1.getRange("I1").getValue();
+    var isExamActiveVal = sheet1.getRange("J1").getValue();
+    var examDateRangeVal = sheet1.getRange("D3").getValue();
 
     var examConfig = {
       schoolName: String(schoolName).trim(),
       examName: String(examName).trim(),
       subject: String(subject).trim(),
       durationMinutes: durationMinutes,
+      examDateRange: String(examDateRangeVal || "").trim(), // D3: Khoảng thời gian cho phép làm kiểm tra (vd: 29/09/2026 - 12/10/2026)
       enableIpBlocking: enableIpBlockingVal !== "" ? (enableIpBlockingVal === true || String(enableIpBlockingVal).trim().toUpperCase() === "BẬT" || String(enableIpBlockingVal).trim().toUpperCase() === "BAT" || String(enableIpBlockingVal).trim().toUpperCase() === "TRUE") : true,
       maxSubmissionsPerIp: (typeof maxSubmissionsVal === 'number' && maxSubmissionsVal > 0) ? maxSubmissionsVal : (parseInt(maxSubmissionsVal, 10) || 1),
       mcShuffleMode: mcShuffleModeVal ? String(mcShuffleModeVal).trim() : "BẬT - BẬT",
       shuffleTrueFalse: shuffleTrueFalseVal !== "" ? (shuffleTrueFalseVal === true || String(shuffleTrueFalseVal).trim().toUpperCase() === "BẬT" || String(shuffleTrueFalseVal).trim().toUpperCase() === "BAT" || String(shuffleTrueFalseVal).trim().toUpperCase() === "TRUE") : true,
       shuffleEssay: shuffleEssayVal !== "" ? (shuffleEssayVal === true || String(shuffleEssayVal).trim().toUpperCase() === "BẬT" || String(shuffleEssayVal).trim().toUpperCase() === "BAT" || String(shuffleEssayVal).trim().toUpperCase() === "TRUE") : false,
+      isExamActive: isExamActiveVal !== "" ? (String(isExamActiveVal).trim().toUpperCase() !== "TẮT" && String(isExamActiveVal).trim().toUpperCase() !== "TAT" && String(isExamActiveVal).trim().toUpperCase() !== "FALSE" && String(isExamActiveVal).trim().toUpperCase() !== "OFF") : true,
       copyrightText: "Lê Hoà Hiệp - 0983.676.470"
     };
 
@@ -1248,17 +1259,19 @@ function doPost(e) {
 
       // Cập nhật cấu hình Dòng 1:
       // A1: Tên kỳ kiểm tra, B1: Môn, C1: Tên trường, D1: Thời gian làm bài (phút)
-      // E1: Bật/tắt chặn IP theo số lần, F1: Số lần cho phép, G1: Hoán đổi TN 1 đáp án, H1: Hoán vị Đúng/Sai, I1: Hoán vị Tự luận
+      // E1: Bật/tắt chặn IP theo số lần, F1: Số lần cho phép, G1: Hoán đổi TN 1 đáp án, H1: Hoán vị Đúng/Sai, I1: Hoán vị Tự luận, J1: Trạng thái kiểm tra (Bật / Tắt)
       if (data.config) {
         if (data.config.examName !== undefined) sheet1.getRange("A1").setValue(data.config.examName);
         if (data.config.subject !== undefined) sheet1.getRange("B1").setValue(data.config.subject);
         if (data.config.schoolName !== undefined) sheet1.getRange("C1").setValue(data.config.schoolName);
         if (data.config.durationMinutes !== undefined) sheet1.getRange("D1").setValue(Number(data.config.durationMinutes) || 15);
+        if (data.config.examDateRange !== undefined) sheet1.getRange("D3").setValue(String(data.config.examDateRange).trim());
         if (data.config.enableIpBlocking !== undefined) sheet1.getRange("E1").setValue(String(data.config.enableIpBlocking).trim());
         if (data.config.maxSubmissionsPerIp !== undefined) sheet1.getRange("F1").setValue(Number(data.config.maxSubmissionsPerIp) || 1);
         if (data.config.mcShuffleMode !== undefined) sheet1.getRange("G1").setValue(String(data.config.mcShuffleMode).trim());
         if (data.config.shuffleTrueFalse !== undefined) sheet1.getRange("H1").setValue(String(data.config.shuffleTrueFalse).trim());
         if (data.config.shuffleEssay !== undefined) sheet1.getRange("I1").setValue(String(data.config.shuffleEssay).trim());
+        if (data.config.isExamActive !== undefined) sheet1.getRange("J1").setValue(String(data.config.isExamActive).trim());
       }
 
       // Cập nhật danh sách câu hỏi từ Dòng 5 trở đi

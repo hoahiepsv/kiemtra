@@ -1,4 +1,6 @@
 import { SubmissionRecord } from '../types';
+import { parseSubmissionDateTime } from './syncService';
+import { isDateWithinExamPeriod } from './examDateService';
 
 export interface IpViolationGroup {
   ipAddress: string;
@@ -11,6 +13,11 @@ export interface IpViolationGroup {
   maxScore: number;
   isSameStudentMultipleTimes: boolean;
   isMultipleStudentsSharedIp: boolean;
+  latestViolationTime: number; // Timestamp mili-giây của lần vi phạm (nộp bài) gần nhất
+  latestViolationTimeFormatted: string; // Chuỗi hiển thị ngày giờ vi phạm gần nhất (e.g. "8:15 04/09/2026")
+  latestStudentName?: string;
+  latestClassName?: string;
+  latestScore?: number;
 }
 
 /**
@@ -50,7 +57,8 @@ export function normalizeIpAddress(rawIp: string | null | undefined): string {
 /**
  * THUẬT TOÁN TÌM KIẾM & PHÁT HIỆN IP TRÙNG NHAU (ĐỘ PHỨC TẠP O(N))
  * Nhóm các bài nộp theo IP máy tính (Cột I trong datasheet 2)
- * và trích xuất tất cả IP đã làm bài từ 2 lần trở lên
+ * và trích xuất tất cả IP đã làm bài từ 2 lần trở lên.
+ * MẶC ĐỊNH SẮP XẾP THEO THỜI GIAN VI PHẠM MỚI NHẤT LÊN ĐẦU.
  */
 export function detectIpViolations(submissions: SubmissionRecord[]): IpViolationGroup[] {
   if (!Array.isArray(submissions) || submissions.length === 0) {
@@ -75,10 +83,24 @@ export function detectIpViolations(submissions: SubmissionRecord[]): IpViolation
 
   ipMap.forEach((records, ip) => {
     if (records.length > 1) {
-      // Sắp xếp theo thứ tự thời gian nộp bài / STT
+      // Sắp xếp theo thứ tự thời gian nộp bài / STT (Từ lần 1 -> các lần nộp sau)
       const sorted = [...records].sort((a, b) => {
-        if (a.stt && b.stt) return a.stt - b.stt;
-        return (a.timestamp || 0) - (b.timestamp || 0);
+        const sttA = Number(a.stt) || 0;
+        const sttB = Number(b.stt) || 0;
+        if (sttA > 0 && sttB > 0 && sttA !== sttB) {
+          return sttA - sttB;
+        }
+        const timeA = Math.max(
+          a.timestamp || 0,
+          parseSubmissionDateTime(a.endTime),
+          parseSubmissionDateTime(a.startTime)
+        );
+        const timeB = Math.max(
+          b.timestamp || 0,
+          parseSubmissionDateTime(b.endTime),
+          parseSubmissionDateTime(b.startTime)
+        );
+        return timeA - timeB;
       });
 
       const studentNamesSet = new Set<string>();
@@ -104,6 +126,18 @@ export function detectIpViolations(submissions: SubmissionRecord[]): IpViolation
       const isSameStudentMultipleTimes = uniqueStudentsCount === 1;
       const isMultipleStudentsSharedIp = uniqueStudentsCount > 1;
 
+      // Xác định bài nộp vi phạm mới nhất (bài nộp cuối cùng của IP này)
+      const latestSub = sorted[sorted.length - 1];
+      const latestViolationTime = Math.max(
+        latestSub?.timestamp || 0,
+        parseSubmissionDateTime(latestSub?.endTime),
+        parseSubmissionDateTime(latestSub?.startTime)
+      );
+      const latestViolationTimeFormatted =
+        latestSub?.endTime ||
+        latestSub?.startTime ||
+        (latestViolationTime > 0 ? new Date(latestViolationTime).toLocaleString('vi-VN') : 'Mới nộp');
+
       violationGroups.push({
         ipAddress: ip,
         submissions: sorted,
@@ -115,12 +149,67 @@ export function detectIpViolations(submissions: SubmissionRecord[]): IpViolation
         maxScore: maxScore === -Infinity ? 0 : maxScore,
         isSameStudentMultipleTimes,
         isMultipleStudentsSharedIp,
+        latestViolationTime,
+        latestViolationTimeFormatted,
+        latestStudentName: latestSub?.studentName || '',
+        latestClassName: latestSub?.className || '',
+        latestScore: Number(latestSub?.totalScore) || 0,
       });
     }
   });
 
-  // Bước 3: Sắp xếp theo mức độ vi phạm (IP làm nhiều lần nhất lên đầu)
-  return violationGroups.sort((a, b) => b.submissionCount - a.submissionCount);
+  // Bước 3: Sắp xếp theo thời gian vi phạm mới nhất (Mới nhất lên đầu bảng)
+  return violationGroups.sort((a, b) => {
+    // 1. So sánh thời gian vi phạm mới nhất (timestamp lớn hơn = mới hơn)
+    if (a.latestViolationTime !== b.latestViolationTime && a.latestViolationTime > 0 && b.latestViolationTime > 0) {
+      return b.latestViolationTime - a.latestViolationTime;
+    }
+    // 2. Dự phòng: So sánh theo STT bài nộp lớn nhất (STT dòng trên Sheet lớn hơn = nộp sau)
+    const maxSttA = Math.max(...a.submissions.map((s) => Number(s.stt) || 0), 0);
+    const maxSttB = Math.max(...b.submissions.map((s) => Number(s.stt) || 0), 0);
+    if (maxSttA !== maxSttB && maxSttA > 0 && maxSttB > 0) {
+      return maxSttB - maxSttA;
+    }
+    // 3. Dự phòng tiếp theo: Số lần vi phạm nhiều hơn
+    return b.submissionCount - a.submissionCount;
+  });
+}
+
+/**
+ * Hàm sắp xếp linh hoạt danh sách vi phạm IP
+ */
+export function sortIpViolations(
+  groups: IpViolationGroup[],
+  sortBy: 'newest' | 'count_desc' | 'oldest' = 'newest'
+): IpViolationGroup[] {
+  const cloned = [...groups];
+  return cloned.sort((a, b) => {
+    if (sortBy === 'newest') {
+      if (a.latestViolationTime !== b.latestViolationTime && a.latestViolationTime > 0 && b.latestViolationTime > 0) {
+        return b.latestViolationTime - a.latestViolationTime;
+      }
+      const maxSttA = Math.max(...a.submissions.map((s) => Number(s.stt) || 0), 0);
+      const maxSttB = Math.max(...b.submissions.map((s) => Number(s.stt) || 0), 0);
+      if (maxSttA !== maxSttB) return maxSttB - maxSttA;
+      return b.submissionCount - a.submissionCount;
+    }
+    if (sortBy === 'oldest') {
+      if (a.latestViolationTime !== b.latestViolationTime && a.latestViolationTime > 0 && b.latestViolationTime > 0) {
+        return a.latestViolationTime - b.latestViolationTime;
+      }
+      const maxSttA = Math.max(...a.submissions.map((s) => Number(s.stt) || 0), 0);
+      const maxSttB = Math.max(...b.submissions.map((s) => Number(s.stt) || 0), 0);
+      if (maxSttA !== maxSttB) return maxSttA - maxSttB;
+      return a.submissionCount - b.submissionCount;
+    }
+    if (sortBy === 'count_desc') {
+      if (b.submissionCount !== a.submissionCount) {
+        return b.submissionCount - a.submissionCount;
+      }
+      return (b.latestViolationTime || 0) - (a.latestViolationTime || 0);
+    }
+    return 0;
+  });
 }
 
 /**
@@ -160,11 +249,22 @@ export function formatBlockedIpString(ip: string, _style: 'suffix' | 'prefix' = 
  * (Nhận diện qua Cột J - Trạng thái: "Chặn" HOẶC Cột I còn chứa dấu hiệu Block cũ để tương thích ngược)
  */
 export function extractBlockedIpsFromSubmissions(
-  submissions: { ipAddress?: string; status?: string; isBlocked?: boolean }[]
+  submissions: { ipAddress?: string; status?: string; isBlocked?: boolean; endTime?: string; startTime?: string; timestamp?: number }[],
+  examDateRange?: string | null
 ): string[] {
   if (!Array.isArray(submissions) || submissions.length === 0) return [];
   const blockedMap = new Map<string, string>();
   for (const s of submissions) {
+    // Nếu có cấu hình khoảng thời gian kỳ kiểm tra (ô D3):
+    // Chỉ các bài nộp phát sinh trong kỳ kiểm tra hiện tại mới tính vi phạm cho kỳ này!
+    // Các vi phạm từ kỳ cũ trước ngày mở kỳ mới sẽ tự động được hoàn nguyên / tính lại từ đầu
+    if (examDateRange) {
+      const subTime = s.endTime || s.startTime || s.timestamp || 0;
+      if (!isDateWithinExamPeriod(subTime, examDateRange)) {
+        continue;
+      }
+    }
+
     const rawIp = String(s.ipAddress || '').trim();
     const rawStatus = String(s.status || '').trim();
     const isStatusBlocked = hasBlockMarker(rawStatus) || s.isBlocked === true;
@@ -259,42 +359,71 @@ export function removeIpFromBlockedList(targetIp: string, currentList: string[] 
 }
 
 /**
- * Ghi nhận thêm 1 lần vào làm bài của IP trên JSON bộ nhớ máy này
+ * Ghi nhận thêm 1 lần vào làm bài của IP trên JSON bộ nhớ máy này (phân biệt theo kỳ kiểm tra)
  */
-export function recordIpEntryOnDevice(clientIp: string | null | undefined): void {
+export function recordIpEntryOnDevice(
+  clientIp: string | null | undefined,
+  examPeriodKey = 'current_exam_period'
+): void {
   if (!clientIp) return;
   const clean = extractCleanIp(clientIp);
   if (!clean) return;
   try {
-    const raw = localStorage.getItem('kiem_tra_thuong_xuyen_ip_entries');
+    const raw = localStorage.getItem('kiem_tra_thuong_xuyen_ip_entries_by_period');
     const data = raw ? JSON.parse(raw) : {};
-    data[clean] = (Number(data[clean]) || 0) + 1;
-    localStorage.setItem('kiem_tra_thuong_xuyen_ip_entries', JSON.stringify(data));
+    if (!data[examPeriodKey] || typeof data[examPeriodKey] !== 'object') {
+      data[examPeriodKey] = {};
+    }
+    data[examPeriodKey][clean] = (Number(data[examPeriodKey][clean]) || 0) + 1;
+    localStorage.setItem('kiem_tra_thuong_xuyen_ip_entries_by_period', JSON.stringify(data));
+
+    // Đồng bộ flat để tương thích ngược
+    const flatRaw = localStorage.getItem('kiem_tra_thuong_xuyen_ip_entries');
+    const flatData = flatRaw ? JSON.parse(flatRaw) : {};
+    flatData[clean] = (Number(flatData[clean]) || 0) + 1;
+    localStorage.setItem('kiem_tra_thuong_xuyen_ip_entries', JSON.stringify(flatData));
   } catch (err) {
     console.error('Lỗi khi ghi nhận lượt vào làm:', err);
   }
 }
 
 /**
- * Đếm số lần 1 IP đã vào làm bài dựa trên dữ liệu JSON lưu trữ trên máy (LocalStorage JSON)
+ * Đếm số lần 1 IP đã vào làm bài trong KỲ KIỂM TRA HIỆN TẠI
+ * Nếu là đề/kỳ mới (hoặc ngoài khoảng thời gian cũ) -> số lần tự động tính lại từ đầu (0 lần)!
  */
-export function countIpSubmissionsOnDevice(clientIp: string | null | undefined): number {
+export function countIpSubmissionsOnDevice(
+  clientIp: string | null | undefined,
+  examDateRange?: string | null,
+  examPeriodKey = 'current_exam_period'
+): number {
   if (!clientIp) return 0;
   const clean = extractCleanIp(clientIp);
   if (!clean) return 0;
 
   try {
-    // 1. Số lần đã được ghi nhận khi vào làm bài
+    // 1. Số lần đã vào làm bài trong kỳ kiểm tra hiện tại
     let entryCount = 0;
-    const entriesRaw = localStorage.getItem('kiem_tra_thuong_xuyen_ip_entries');
-    if (entriesRaw) {
-      const parsed = JSON.parse(entriesRaw);
-      if (parsed && typeof parsed === 'object') {
-        entryCount = Number(parsed[clean]) || 0;
+    const periodRaw = localStorage.getItem('kiem_tra_thuong_xuyen_ip_entries_by_period');
+    if (periodRaw) {
+      const periodData = JSON.parse(periodRaw);
+      if (periodData && periodData[examPeriodKey] && typeof periodData[examPeriodKey] === 'object') {
+        entryCount = Number(periodData[examPeriodKey][clean]) || 0;
       }
     }
 
-    // 2. Số lần đã hoàn thành và lưu trong lịch sử bài nộp trên máy
+    // Nếu chưa có cấu hình period cụ thể và không có examDateRange -> dùng flat
+    if (entryCount === 0 && !examDateRange) {
+      const entriesRaw = localStorage.getItem('kiem_tra_thuong_xuyen_ip_entries');
+      if (entriesRaw) {
+        const parsed = JSON.parse(entriesRaw);
+        if (parsed && typeof parsed === 'object') {
+          entryCount = Number(parsed[clean]) || 0;
+        }
+      }
+    }
+
+    // 2. Số lần đã nộp và lưu trong lịch sử trên máy
+    // CHỈ TÍNH BÀI NỘP NẰM TRONG KỲ KIỂM TRA HIỆN TẠI (Ô D3)
     let historyCount = 0;
     const raw = localStorage.getItem('kiem_tra_thuong_xuyen_history');
     if (raw) {
@@ -302,7 +431,14 @@ export function countIpSubmissionsOnDevice(clientIp: string | null | undefined):
       if (Array.isArray(history)) {
         historyCount = history.filter((item) => {
           const itemIp = extractCleanIp(item.ipAddress);
-          return itemIp && itemIp === clean;
+          if (!itemIp || itemIp !== clean) return false;
+
+          // Nếu có khoảng thời gian thi D3: chỉ tính bài nộp trong khoảng này
+          if (examDateRange) {
+            const timeVal = item.endTime || item.startTime || item.timestamp || 0;
+            return isDateWithinExamPeriod(timeVal, examDateRange);
+          }
+          return true;
         }).length;
       }
     }
@@ -315,18 +451,40 @@ export function countIpSubmissionsOnDevice(clientIp: string | null | undefined):
 }
 
 /**
- * Kiểm tra xem IP có vi phạm số lần vào làm cho phép hay không
+ * Kiểm tra xem IP có vi phạm số lần vào làm cho phép trong kỳ kiểm tra này hay không
  */
 export function isIpOverSubmissionLimit(
   clientIp: string | null | undefined,
   maxAllowed: number | undefined,
-  enableBlocking = true
+  enableBlocking = true,
+  examDateRange?: string | null,
+  examPeriodKey = 'current_exam_period'
 ): boolean {
   if (!enableBlocking) return false;
   const limit = Number(maxAllowed);
   if (isNaN(limit) || limit <= 0) return false;
 
-  const count = countIpSubmissionsOnDevice(clientIp);
+  const count = countIpSubmissionsOnDevice(clientIp, examDateRange, examPeriodKey);
   return count >= limit;
+}
+
+/**
+ * Tự động nhận diện thay đổi kỳ kiểm tra để hoàn nguyên / xóa bộ nhớ đếm tạm cũ
+ */
+export function checkAndResetPeriodOnDevice(newPeriodKey: string): boolean {
+  try {
+    const lastKey = localStorage.getItem('kiem_tra_last_known_period_key');
+    if (lastKey && lastKey !== newPeriodKey) {
+      // Đã đổi sang kỳ thi mới: hoàn nguyên bộ đếm cũ trên máy học sinh để tính lại từ đầu
+      localStorage.removeItem('kiem_tra_thuong_xuyen_ip_entries');
+      localStorage.removeItem('kiem_tra_thuong_xuyen_ip_entries_by_period');
+      localStorage.setItem('kiem_tra_last_known_period_key', newPeriodKey);
+      return true;
+    }
+    if (!lastKey) {
+      localStorage.setItem('kiem_tra_last_known_period_key', newPeriodKey);
+    }
+  } catch {}
+  return false;
 }
 

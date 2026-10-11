@@ -95,13 +95,31 @@ export function clearAllExamData(): void {
 export function parseSubmissionDateTime(dateStr?: string): number {
   if (!dateStr || typeof dateStr !== 'string') return 0;
   const s = dateStr.trim();
-  if (s.includes('/') && s.includes(':')) {
+  if ((s.includes('/') || s.includes('-')) && s.includes(':')) {
     const parts = s.split(/\s+/);
     if (parts.length >= 2) {
-      const [h, m] = parts[0].split(':').map(Number);
-      const [d, mo, y] = parts[1].split('/').map(Number);
-      if (y && mo && d) {
-        return new Date(y, mo - 1, d, h || 0, m || 0).getTime();
+      const timePart = parts.find((p) => p.includes(':')) || '';
+      const datePart = parts.find((p) => p.includes('/') || p.includes('-')) || '';
+      if (timePart && datePart) {
+        const timeNums = timePart.split(':').map(Number);
+        const [h, m, sec] = timeNums;
+        const delim = datePart.includes('/') ? '/' : '-';
+        const dateNums = datePart.split(delim).map(Number);
+        // Kiểm tra xem năm ở đầu (YYYY-MM-DD) hay ở cuối (DD/MM/YYYY)
+        let d = 0;
+        let mo = 0;
+        let y = 0;
+        if (dateNums[0] > 1000) {
+          [y, mo, d] = dateNums;
+        } else {
+          [d, mo, y] = dateNums;
+        }
+        if (y && mo && d) {
+          const dt = new Date(y, mo - 1, d, h || 0, m || 0, sec || 0);
+          if (!isNaN(dt.getTime())) {
+            return dt.getTime();
+          }
+        }
       }
     }
   }
@@ -558,6 +576,13 @@ export async function fetchQuestionsFromData1(data1Url: string): Promise<{
         if (json.config.durationMinutes) {
           config.durationMinutes = Number(json.config.durationMinutes) || 15;
         }
+        // D3: Khoảng thời gian cho phép làm kiểm tra (vd: 29/09/2026 - 12/10/2026)
+        if (json.config.examDateRange !== undefined && json.config.examDateRange !== null) {
+          const rawD3 = String(json.config.examDateRange).trim();
+          if (rawD3) {
+            config.examDateRange = rawD3;
+          }
+        }
         // E1: Trạng thái bật/tắt tự động chặn IP vi phạm số lần vào làm
         if (json.config.enableIpBlocking !== undefined) {
           const rawE = String(json.config.enableIpBlocking).trim().toUpperCase();
@@ -592,6 +617,16 @@ export async function fetchQuestionsFromData1(data1Url: string): Promise<{
         if (json.config.shuffleEssay !== undefined) {
           const rawI = String(json.config.shuffleEssay).trim().toUpperCase();
           config.shuffleEssay = rawI === 'BẬT' || rawI === 'BAT' || rawI === 'TRUE' || json.config.shuffleEssay === true;
+        }
+        // J1: Trạng thái bật/tắt kiểm tra (Bật / Tắt)
+        if (json.config.isExamActive !== undefined) {
+          const rawJ = String(json.config.isExamActive).trim().toUpperCase();
+          config.isExamActive =
+            rawJ !== 'TẮT' &&
+            rawJ !== 'TAT' &&
+            rawJ !== 'FALSE' &&
+            rawJ !== 'OFF' &&
+            json.config.isExamActive !== false;
         }
       }
 
@@ -668,6 +703,8 @@ export async function saveExamToData1(
   const shuffleTrueFalseText = config.shuffleTrueFalse === false ? 'TẮT' : 'BẬT';
   // I1: BẬT hoặc TẮT
   const shuffleEssayText = config.shuffleEssay === true ? 'BẬT' : 'TẮT';
+  // J1: Bật hoặc Tắt
+  const isExamActiveText = config.isExamActive === false ? 'Tắt' : 'Bật';
 
   const payload = {
     action: 'saveExam',
@@ -676,11 +713,13 @@ export async function saveExamToData1(
       examName: config.examName, // A1
       subject: config.subject, // B1
       durationMinutes: config.durationMinutes, // D1
+      examDateRange: (config.examDateRange || '').trim(), // D3: Khoảng thời gian cho phép làm kiểm tra
       enableIpBlocking: enableIpBlockingText, // E1
       maxSubmissionsPerIp: maxSubmissionsText, // F1
       mcShuffleMode: mcShuffleModeText, // G1
       shuffleTrueFalse: shuffleTrueFalseText, // H1
       shuffleEssay: shuffleEssayText, // I1
+      isExamActive: isExamActiveText, // J1
     },
     questions: questions.map((q, idx) => ({
       orderNumber: q.orderNumber || idx + 1,
@@ -841,7 +880,8 @@ export async function fetchSubmissionsFromData2(data2Url: string): Promise<Submi
  */
 export async function checkLiveIpBlockedOnSheet(
   data2Url: string,
-  targetIp: string
+  targetIp: string,
+  examDateRange?: string | null
 ): Promise<{ isBlocked: boolean; blockedList: string[] }> {
   if (!data2Url || !data2Url.trim() || !targetIp) {
     return { isBlocked: false, blockedList: [] };
@@ -851,7 +891,7 @@ export async function checkLiveIpBlockedOnSheet(
 
   try {
     const list = await fetchSubmissionsFromData2(data2Url);
-    const blockedList = extractBlockedIpsFromSubmissions(list);
+    const blockedList = extractBlockedIpsFromSubmissions(list, examDateRange);
     const isBlocked = blockedList.some((b) => extractCleanIp(b) === cleanTarget);
     return { isBlocked, blockedList };
   } catch (err) {
