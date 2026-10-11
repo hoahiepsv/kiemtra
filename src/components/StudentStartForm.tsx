@@ -3,7 +3,7 @@ import { Play, Clock, BookOpen, School, AlertCircle, Sparkles, RotateCcw, CheckC
 import { ExamConfig, DraftExam, Question } from '../types';
 import { fetchClientIp } from '../utils/ipService';
 import { formatStudentName, formatClassName } from '../utils/studentFormatting';
-import { isIpBlockedCheck } from '../utils/ipViolationService';
+import { isIpBlockedCheck, isIpOverSubmissionLimit } from '../utils/ipViolationService';
 import { checkLiveIpBlockedOnSheet } from '../utils/syncService';
 
 interface StudentStartFormProps {
@@ -55,10 +55,12 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
   const [isLoadingIp, setIsLoadingIp] = useState<boolean>(true);
   const [isCheckingSecurity, setIsCheckingSecurity] = useState<boolean>(false);
 
-  // Tra soát tức thời trong RAM (< 0.0001s) xem IP thiết bị này có bị Giáo viên chặn hay không
+  // Tra soát tức thời trong RAM và JSON lịch sử trên máy xem IP thiết bị này có bị Giáo viên chặn hoặc vượt quá số lần làm bài hay không
   const isDeviceBlocked = useMemo(() => {
-    return isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true);
-  }, [clientIp, config.blockedIps, config.enableIpBlocking]);
+    const isManuallyBlocked = isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true);
+    const isOverLimit = isIpOverSubmissionLimit(clientIp, config.maxSubmissionsPerIp, config.enableIpBlocking ?? true);
+    return isManuallyBlocked || isOverLimit;
+  }, [clientIp, config.blockedIps, config.enableIpBlocking, config.maxSubmissionsPerIp]);
 
   // Kiểm tra 1 lần duy nhất ngay khi mở ứng dụng xem SBD/IP này có bị chặn hay không
   useEffect(() => {
@@ -111,6 +113,15 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
         currentCheckIp = await fetchClientIp();
         if (currentCheckIp) setClientIp(currentCheckIp);
       } catch {}
+    }
+
+    // 1.1. Kiểm tra giới hạn số lần làm bài trên thiết bị (F1)
+    if (isIpOverSubmissionLimit(currentCheckIp, config.maxSubmissionsPerIp, config.enableIpBlocking ?? true)) {
+      setIsCheckingSecurity(false);
+      setErrorMessage(
+        `⛔ Thí sinh (SBD: ${currentCheckIp || clientIp || 'SBD'}) đã bị tạm khóa vì đã vi phạm quy định làm quá số lần cho phép (${config.maxSubmissionsPerIp || 1} lần)!`
+      );
+      return;
     }
 
     // 2. KIỂM TRA THỜI GIAN THỰC VỚI GOOGLE SHEET (DATA2) ĐẦU TIÊN:

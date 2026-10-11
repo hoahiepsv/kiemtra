@@ -55,9 +55,13 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
   const [subject, setSubject] = useState(config.subject || '');
   const [durationMinutes, setDurationMinutes] = useState<number>(config.durationMinutes || 15);
   const [data1Url, setData1Url] = useState(config.data1Url || '');
-  const [shuffleQuestions, setShuffleQuestions] = useState<boolean>(config.shuffleQuestions !== false);
-  const [shuffleOptions, setShuffleOptions] = useState<boolean>(config.shuffleOptions !== false);
   const [enableIpBlocking, setEnableIpBlocking] = useState<boolean>(config.enableIpBlocking ?? true);
+  const [maxSubmissionsPerIp, setMaxSubmissionsPerIp] = useState<number>(config.maxSubmissionsPerIp ?? 1);
+  const [mcShuffleMode, setMcShuffleMode] = useState<'BAT_BAT' | 'BAT_TAT' | 'TAT_BAT' | 'TAT_TAT'>(
+    config.mcShuffleMode || 'BAT_BAT'
+  );
+  const [shuffleTrueFalse, setShuffleTrueFalse] = useState<boolean>(config.shuffleTrueFalse ?? true);
+  const [shuffleEssay, setShuffleEssay] = useState<boolean>(config.shuffleEssay ?? false);
   const [blockedIpsList, setBlockedIpsList] = useState<string[]>(config.blockedIps || []);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatusMsg, setSaveStatusMsg] = useState<string | null>(null);
@@ -98,9 +102,11 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
       setSubject(config.subject || '');
       setDurationMinutes(config.durationMinutes || 15);
       setData1Url(config.data1Url || '');
-      setShuffleQuestions(config.shuffleQuestions !== false);
-      setShuffleOptions(config.shuffleOptions !== false);
       setEnableIpBlocking(config.enableIpBlocking ?? true);
+      setMaxSubmissionsPerIp(config.maxSubmissionsPerIp ?? 1);
+      setMcShuffleMode(config.mcShuffleMode || 'BAT_BAT');
+      setShuffleTrueFalse(config.shuffleTrueFalse ?? true);
+      setShuffleEssay(config.shuffleEssay ?? false);
       setBlockedIpsList(config.blockedIps || []);
 
       // Deep clone questions
@@ -328,14 +334,18 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
 
     const updatedConfig: ExamConfig = {
       ...config,
-      schoolName: schoolName.trim(),
-      examName: examName.trim(),
-      subject: subject.trim(),
-      durationMinutes: Number(durationMinutes),
+      schoolName: schoolName.trim(), // C1
+      examName: examName.trim(), // A1
+      subject: subject.trim(), // B1
+      durationMinutes: Number(durationMinutes), // D1
       data1Url: normalizeAppsScriptUrl(data1Url),
-      shuffleQuestions,
-      shuffleOptions,
-      enableIpBlocking,
+      enableIpBlocking, // E1
+      maxSubmissionsPerIp: Math.max(1, parseInt(String(maxSubmissionsPerIp), 10) || 1), // F1
+      mcShuffleMode, // G1
+      shuffleTrueFalse, // H1
+      shuffleEssay, // I1
+      shuffleQuestions: mcShuffleMode === 'BAT_BAT' || mcShuffleMode === 'BAT_TAT',
+      shuffleOptions: mcShuffleMode === 'BAT_BAT' || mcShuffleMode === 'TAT_BAT',
       blockedIps: blockedIpsList,
     };
 
@@ -572,45 +582,81 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                   </div>
                 </div>
 
-                {/* Tùy chọn xáo trộn đề & đáp án ngẫu nhiên - 2 dòng siêu gọn gàng */}
-                <div className="col-span-1 sm:col-span-2 lg:col-span-4 pt-2 border-t border-slate-100">
-                  <div className="bg-indigo-50/50 p-2 sm:px-3 sm:py-1.5 rounded-xl border border-indigo-100 space-y-1">
-                    {/* Dòng 1: Xáo trộn câu hỏi */}
-                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
-                      <input
-                        type="checkbox"
-                        checked={shuffleQuestions}
-                        onChange={(e) => setShuffleQuestions(e.target.checked)}
-                        className="w-4 h-4 rounded-xs text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer flex-shrink-0"
-                      />
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-slate-800">
-                          Chỉ hoán vị các câu hỏi trắc nghiệm
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          (Các câu trắc nghiệm được xáo trộn với nhau; câu tự luận giữ nguyên vị trí cố định)
-                        </span>
-                      </div>
-                    </label>
+                {/* E1: Trạng thái bật/tắt tự động chặn IP vi phạm số lần vào làm */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Trạng thái tự động chặn IP vi phạm số lần vào làm:
+                  </label>
+                  <select
+                    value={enableIpBlocking ? 'BAT' : 'TAT'}
+                    onChange={(e) => setEnableIpBlocking(e.target.value === 'BAT')}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-semibold text-slate-800 bg-white"
+                  >
+                    <option value="BAT">BẬT</option>
+                    <option value="TAT">TẮT</option>
+                  </select>
+                </div>
 
-                    {/* Dòng 2: Xáo trộn đáp án */}
-                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs">
-                      <input
-                        type="checkbox"
-                        checked={shuffleOptions}
-                        onChange={(e) => setShuffleOptions(e.target.checked)}
-                        className="w-4 h-4 rounded-xs text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer flex-shrink-0"
-                      />
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-slate-800">
-                          Hoán đổi ngẫu nhiên đáp án (A, B, C, D)
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          (Vị trí các lựa chọn trắc nghiệm được đảo ngẫu nhiên)
-                        </span>
-                      </div>
-                    </label>
-                  </div>
+                {/* F1: Số lần cho phép 1 IP vào làm */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Số lần cho phép 1 IP vào làm:
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={maxSubmissionsPerIp}
+                    onChange={(e) => setMaxSubmissionsPerIp(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-semibold text-slate-800"
+                  />
+                </div>
+
+                {/* G1: Bật tắt chế độ tự động hoán đổi câu hỏi trắc nghiệm 1 đáp án */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Chế độ tự động hoán đổi câu hỏi trắc nghiệm 1 đáp án:
+                  </label>
+                  <select
+                    value={mcShuffleMode}
+                    onChange={(e) => setMcShuffleMode(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-semibold text-slate-800 bg-white"
+                  >
+                    <option value="BAT_BAT">BẬT - BẬT</option>
+                    <option value="BAT_TAT">BẬT - TẮT</option>
+                    <option value="TAT_BAT">TẮT - BẬT</option>
+                    <option value="TAT_TAT">TẮT - TẮT</option>
+                  </select>
+                </div>
+
+                {/* H1: Trạng thái bật/tắt hoán vị các câu hỏi đúng/sai */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Trạng thái hoán vị các câu hỏi đúng/sai:
+                  </label>
+                  <select
+                    value={shuffleTrueFalse ? 'BAT' : 'TAT'}
+                    onChange={(e) => setShuffleTrueFalse(e.target.value === 'BAT')}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-semibold text-slate-800 bg-white"
+                  >
+                    <option value="BAT">BẬT</option>
+                    <option value="TAT">TẮT</option>
+                  </select>
+                </div>
+
+                {/* I1: Trạng thái bật/tắt hoán vị các câu hỏi tự luận */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Trạng thái hoán vị các câu hỏi tự luận:
+                  </label>
+                  <select
+                    value={shuffleEssay ? 'BAT' : 'TAT'}
+                    onChange={(e) => setShuffleEssay(e.target.value === 'BAT')}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-semibold text-slate-800 bg-white"
+                  >
+                    <option value="BAT">BẬT</option>
+                    <option value="TAT">TẮT</option>
+                  </select>
                 </div>
               </div>
             )}
