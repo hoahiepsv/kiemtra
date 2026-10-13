@@ -99,19 +99,6 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
     }
   };
 
-  const handleRangeTextChange = (text: string) => {
-    setExamDateRange(text);
-    const pr = parseExamDateRange(text);
-    if (pr.startDate) setStartDateInput(formatDateToInputYmd(pr.startDate));
-    if (pr.endDate) setEndDateInput(formatDateToInputYmd(pr.endDate));
-    const newStatus = checkExamDateStatus(text);
-    if (newStatus.status === 'expired') {
-      setIsExamActive(false);
-    } else if (newStatus.status === 'active') {
-      setIsExamActive(true);
-    }
-  };
-
 
   // Questions state (local copy for editing)
   const [questionList, setQuestionList] = useState<Question[]>([]);
@@ -674,7 +661,7 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                       )}
                     </div>
 
-                    {/* Hàng ngang: Ô chọn ngày, ô chuỗi D3 & nút chọn nhanh */}
+                    {/* Hàng ngang: Ô chọn ngày */}
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">Từ:</span>
@@ -692,23 +679,14 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                           className="px-2.5 py-1.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-semibold text-xs text-slate-800 bg-white"
                         />
                       </div>
-
-                      <input
-                        type="text"
-                        value={examDateRange}
-                        onChange={(e) => handleRangeTextChange(e.target.value)}
-                        placeholder="29/09/2026 - 12/10/2026"
-                        className="w-44 sm:w-52 px-2.5 py-1.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-mono font-bold text-xs text-slate-800 bg-white text-center"
-                      />
-
                     </div>
                   </div>
                 </div>
 
-                {/* E1: Trạng thái bật/tắt tự động chặn IP vi phạm số lần vào làm */}
+                {/* E1: Tự động chặn IP vi phạm */}
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Trạng thái tự động chặn IP vi phạm số lần vào làm:
+                    Tự động chặn IP vi phạm:
                   </label>
                   <select
                     value={enableIpBlocking ? 'BAT' : 'TAT'}
@@ -720,10 +698,10 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                   </select>
                 </div>
 
-                {/* F1: Số lần cho phép 1 IP vào làm */}
+                {/* F1: Số lần cho phép làm */}
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Số lần cho phép 1 IP vào làm:
+                    Số lần cho phép làm:
                   </label>
                   <input
                     type="number"
@@ -735,10 +713,10 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                   />
                 </div>
 
-                {/* G1: Bật tắt chế độ tự động hoán đổi câu hỏi trắc nghiệm 1 đáp án */}
+                {/* G1: Hoán vị câu hỏi trắc nghiệm 1 đáp án */}
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Chế độ tự động hoán đổi câu hỏi trắc nghiệm 1 đáp án:
+                    Hoán vị câu hỏi trắc nghiệm 1 đáp án:
                   </label>
                   <select
                     value={mcShuffleMode}
@@ -752,10 +730,10 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                   </select>
                 </div>
 
-                {/* H1: Trạng thái bật/tắt hoán vị các câu hỏi đúng/sai */}
+                {/* H1: Hoán vị các câu hỏi đúng/sai */}
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Trạng thái hoán vị các câu hỏi đúng/sai:
+                    Hoán vị các câu hỏi đúng/sai:
                   </label>
                   <select
                     value={shuffleTrueFalse ? 'BAT' : 'TAT'}
@@ -767,10 +745,10 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                   </select>
                 </div>
 
-                {/* I1: Trạng thái bật/tắt hoán vị các câu hỏi tự luận */}
+                {/* I1: Hoán vị các câu hỏi tự luận */}
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Trạng thái hoán vị các câu hỏi tự luận:
+                    Hoán vị các câu hỏi tự luận:
                   </label>
                   <select
                     value={shuffleEssay ? 'BAT' : 'TAT'}
@@ -782,11 +760,11 @@ export const ExamEditorModal: React.FC<ExamEditorModalProps> = ({
                   </select>
                 </div>
 
-                {/* J1: Trạng thái kiểm tra: Bật / Tắt (Phụ thuộc vào ngày chọn) */}
+                {/* J1: Mở kiểm tra: Bật / Tắt (Phụ thuộc vào ngày chọn) */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block font-bold text-slate-700">
-                      Trạng thái kiểm tra:
+                      Mở kiểm tra:
                     </label>
                     {examDateStatus.status === 'expired' && (
                       <span className="text-[11px] font-bold text-rose-600">
