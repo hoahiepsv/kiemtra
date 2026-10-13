@@ -54,6 +54,8 @@ import {
   clearSubmissionHistory,
   deleteSubmissionFromHistory,
   updateSubmissionInHistory,
+  clearIpHistoryAndDeviceEntries,
+  sendIpBlockUpdateToSheet,
   clearAllExamData,
 } from './utils/syncService';
 import { checkEssayAnswerMatch } from './utils/gradeService';
@@ -64,6 +66,8 @@ import {
   isIpOverSubmissionLimit,
   formatBlockedIpString,
   extractBlockedIpsFromSubmissions,
+  extractAllBlockedIpsFromSubmissions,
+  countIpSubmissionsFromList,
   extractCleanIp,
   recordIpEntryOnDevice,
 } from './utils/ipViolationService';
@@ -168,19 +172,34 @@ export default function App() {
             const updated = syncSubmissionsFromSheetToHistory(sheetData);
             setHistoryList(updated);
 
-            // Tự động quét và đồng bộ các IP bị chặn từ Google Sheets data2 (chỉ tính bài nộp trong kỳ kiểm tra hiện tại D3)
-            const blockedFromSheet = extractBlockedIpsFromSubmissions(sheetData, config.examDateRange);
+            // Tự động quét và đồng bộ các IP bị chặn từ Google Sheets data2:
+            // CHỈ tính những IP thực sự có trạng thái "Chặn" (Cột J = "Chặn" hoặc Cột I có dấu Block)
+            // Nếu Giáo viên đã BỎ CHẶN trên data2, IP sẽ tự động được xóa khỏi danh sách chặn!
+            const blockedFromSheet = extractBlockedIpsFromSubmissions(
+              sheetData,
+              config.examDateRange
+            );
             const cleanBlockedFromSheet = Array.from(new Set(blockedFromSheet.map(extractCleanIp).filter(Boolean)));
             setConfig((prev) => {
               const nextConfig = { ...prev, blockedIps: cleanBlockedFromSheet };
               localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(nextConfig));
               return nextConfig;
             });
+
+            // Nếu máy hiện tại không nằm trong danh sách chặn trên data2 -> xóa sạch bộ đếm cũ trên máy
+            fetchClientIp().then((currentIp) => {
+              if (currentIp) {
+                const cleanCurrent = extractCleanIp(currentIp);
+                if (cleanCurrent && !cleanBlockedFromSheet.includes(cleanCurrent)) {
+                  clearIpHistoryAndDeviceEntries(cleanCurrent);
+                }
+              }
+            }).catch(() => {});
           }
         })
         .catch(() => {});
     }
-  }, [config.data2Url, config.examDateRange]);
+  }, [config.data2Url, config.examDateRange, config.maxSubmissionsPerIp, config.enableIpBlocking]);
 
   const handleAuthorClick = () => {
     if (adminSession) {
@@ -668,8 +687,14 @@ export default function App() {
           ? Math.max(...existingHistory.map((h) => Number(h.stt) || 0), 0) + 1
           : 1;
 
-        const isClientBlocked = isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true);
         const cleanClientIp = clientIp ? extractCleanIp(clientIp) : '';
+        const limitAllowed = Number(config.maxSubmissionsPerIp) || 1;
+        // Đếm tổng số lần học sinh nộp từ IP này (trong kỳ kiểm tra hiện tại)
+        const previousSubCount = countIpSubmissionsFromList(existingHistory, cleanClientIp, config.examDateRange);
+        const totalSubCountWithCurrent = previousSubCount + 1;
+        const isLimitViolated = config.enableIpBlocking !== false && totalSubCountWithCurrent >= limitAllowed;
+
+        const isClientBlocked = isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true) || isLimitViolated;
 
         const record: SubmissionRecord = {
           stt: nextSTT,
@@ -689,19 +714,48 @@ export default function App() {
           questionResults,
         };
 
+        // Nếu học sinh vi phạm số lần, cập nhật ngay vào danh sách blockedIps trong cấu hình ứng dụng
+        if (isClientBlocked && cleanClientIp) {
+          setConfig((prev) => {
+            if (!prev.blockedIps?.includes(cleanClientIp)) {
+              const nextBlocked = [...(prev.blockedIps || []), cleanClientIp];
+              const nextConfig = { ...prev, blockedIps: nextBlocked };
+              localStorage.setItem('kiem_tra_thuong_xuyen_config', JSON.stringify(nextConfig));
+              return nextConfig;
+            }
+            return prev;
+          });
+        }
+
         // Clear the draft now that it's submitted
         clearDraftExam();
 
-        // Lưu bài nộp vào JSON lịch sử trên máy này để đếm số lần và đối chiếu
-        saveSubmissionHistory(record);
-        setHistoryList(getSubmissionHistory());
+        // Nếu học sinh vi phạm quá số lần hoặc bị chặn:
+        // Ghi trạng thái Chặn lên data2, đồng thời XÓA SẠCH lịch sử JSON và bộ đếm cũ của IP này trên máy!
+        // Giúp khi giáo viên/hệ thống MỞ CHẶN trên data2, học sinh có thể tiếp tục vào làm bài mà không bị kẹt bởi đếm cũ.
+        if (isClientBlocked && cleanClientIp) {
+          // Xóa sạch lịch sử json và bộ đếm của IP này trên máy
+          const cleanedHistory = clearIpHistoryAndDeviceEntries(cleanClientIp);
+          setHistoryList(cleanedHistory);
+
+          // Nếu có Google Sheets data2, gửi ngay lệnh cập nhật trạng thái "Chặn" lên Cột J
+          if (config.data2Url) {
+            sendIpBlockUpdateToSheet(config.data2Url, cleanClientIp, true).catch(() => {});
+          }
+        } else {
+          // Lưu bài nộp vào JSON lịch sử trên máy này nếu chưa bị chặn
+          saveSubmissionHistory(record);
+          setHistoryList(getSubmissionHistory());
+        }
 
         // Attempt sending to Google Sheet (data2)
         if (config.data2Url && config.data2Url.trim()) {
           const sendResult = await sendSubmissionToData2(config.data2Url, record);
           if (sendResult.success) {
             record.syncedToData2 = true;
-            updateSubmissionInHistory(record);
+            if (!isClientBlocked) {
+              updateSubmissionInHistory(record);
+            }
             setSyncToast('Đã gửi điểm cho giáo viên');
           } else {
             setSyncToast(sendResult.message);
