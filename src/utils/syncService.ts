@@ -1,7 +1,16 @@
 import { SubmissionRecord, DraftExam, Question, ExamConfig, QuestionType } from '../types';
 import { formatExamDateTime, formatExamDuration } from './dateUtils';
 import { parseScoreStringDetailed } from './scoreStringUtils';
-import { extractCleanIp, formatBlockedIpString, hasBlockMarker, extractBlockedIpsFromSubmissions } from './ipViolationService';
+import {
+  extractCleanIp,
+  formatBlockedIpString,
+  hasBlockMarker,
+  isStatusBlockedMarker,
+  hasUnblockKeyword,
+  extractBlockedIpsFromSubmissions,
+  countIpSubmissionsFromList,
+} from './ipViolationService';
+import { isDateWithinExamPeriod } from './examDateService';
 
 const DRAFT_STORAGE_KEY = 'kiem_tra_thuong_xuyen_draft';
 const UNSYNCED_STORAGE_KEY = 'kiem_tra_thuong_xuyen_unsynced';
@@ -201,6 +210,59 @@ export function deleteSubmissionFromHistory(studentName: string, className?: str
     return updated;
   } catch (e) {
     console.error('Error deleting submission from history:', e);
+    return getSubmissionHistory();
+  }
+}
+
+/**
+ * Xóa sạch lịch sử làm bài (JSON) và lượt đếm của một địa chỉ IP
+ * Dùng khi học sinh vi phạm bị chặn hoặc khi mở chặn để học sinh có thể tiếp tục làm lại
+ */
+export function clearIpHistoryAndDeviceEntries(targetIp: string | null | undefined): SubmissionRecord[] {
+  if (!targetIp) return getSubmissionHistory();
+  const clean = extractCleanIp(targetIp);
+  if (!clean) return getSubmissionHistory();
+
+  try {
+    // 1. Xóa các bản ghi nộp bài của IP này trong lịch sử máy (SUBMISSION_HISTORY_KEY)
+    const existing = getSubmissionHistory();
+    const updated = existing.filter((item) => {
+      const itemClean = extractCleanIp(item.ipAddress);
+      return itemClean !== clean;
+    });
+    localStorage.setItem(SUBMISSION_HISTORY_KEY, JSON.stringify(updated));
+
+    // 2. Xóa bộ đếm lượt vào thi theo kỳ kiểm tra (kiem_tra_thuong_xuyen_ip_entries_by_period)
+    const periodRaw = localStorage.getItem('kiem_tra_thuong_xuyen_ip_entries_by_period');
+    if (periodRaw) {
+      try {
+        const periodData = JSON.parse(periodRaw);
+        if (periodData && typeof periodData === 'object') {
+          for (const key of Object.keys(periodData)) {
+            if (periodData[key] && typeof periodData[key] === 'object' && periodData[key][clean] !== undefined) {
+              delete periodData[key][clean];
+            }
+          }
+          localStorage.setItem('kiem_tra_thuong_xuyen_ip_entries_by_period', JSON.stringify(periodData));
+        }
+      } catch {}
+    }
+
+    // 3. Xóa bộ đếm flat cũ (kiem_tra_thuong_xuyen_ip_entries)
+    const flatRaw = localStorage.getItem('kiem_tra_thuong_xuyen_ip_entries');
+    if (flatRaw) {
+      try {
+        const flatData = JSON.parse(flatRaw);
+        if (flatData && typeof flatData === 'object' && flatData[clean] !== undefined) {
+          delete flatData[clean];
+          localStorage.setItem('kiem_tra_thuong_xuyen_ip_entries', JSON.stringify(flatData));
+        }
+      } catch {}
+    }
+
+    return updated;
+  } catch (err) {
+    console.error('Lỗi khi xóa lịch sử và bộ đếm IP:', err);
     return getSubmissionHistory();
   }
 }
@@ -842,9 +904,10 @@ export async function fetchSubmissionsFromData2(data2Url: string): Promise<Submi
           (Array.isArray(item) ? item[9] : undefined) ??
           '';
         const parsedStatus = typeof rawStatus === 'string' ? rawStatus.trim() : String(rawStatus || '').trim();
+        // Kiểm tra xem dòng này có trạng thái chặn không (nếu giáo viên ghi 'Bỏ chặn' hoặc 'Bình thường' -> KHÔNG CHẶN)
         const isBlockedRow = Boolean(
-          item.isBlocked === true ||
-          /ch[aặ]n|block/i.test(parsedStatus) ||
+          (item.isBlocked === true && !hasUnblockKeyword(parsedStatus)) ||
+          isStatusBlockedMarker(parsedStatus) ||
           hasBlockMarker(parsedIp)
         );
 
@@ -876,27 +939,82 @@ export async function fetchSubmissionsFromData2(data2Url: string): Promise<Submi
 
 /**
  * Kiểm tra trực tiếp tức thời với Google Sheet data2 xem địa chỉ IP này có đang bị Chặn hay không
- * Đảm bảo chặn ngay lập tức kể cả khi học sinh vừa mở trang và dữ liệu chưa kịp đồng bộ xong
+ * NGUYÊN TẮC: Google Sheet data2 là nguồn quyết định cao nhất của Giáo viên!
+ * - Nếu giáo viên đã BỎ CHẶN trên data2 (cột J là "Bỏ chặn", "Bình thường" hoặc xóa chữ "Chặn"), IP sẽ được mở ngay lập tức!
+ * - Hệ thống TUYỆT ĐỐI KHÔNG tự động gửi lệnh chặn đè lên sheet khi giáo viên đã mở chặn.
  */
 export async function checkLiveIpBlockedOnSheet(
   data2Url: string,
   targetIp: string,
-  examDateRange?: string | null
-): Promise<{ isBlocked: boolean; blockedList: string[] }> {
+  examDateRange?: string | null,
+  maxSubmissionsPerIp?: number,
+  enableIpBlocking = true
+): Promise<{
+  isBlocked: boolean;
+  blockedList: string[];
+  submissionCountOnSheet: number;
+  isOverLimit: boolean;
+}> {
   if (!data2Url || !data2Url.trim() || !targetIp) {
-    return { isBlocked: false, blockedList: [] };
+    return { isBlocked: false, blockedList: [], submissionCountOnSheet: 0, isOverLimit: false };
   }
   const cleanTarget = extractCleanIp(targetIp);
-  if (!cleanTarget) return { isBlocked: false, blockedList: [] };
+  if (!cleanTarget) return { isBlocked: false, blockedList: [], submissionCountOnSheet: 0, isOverLimit: false };
 
   try {
     const list = await fetchSubmissionsFromData2(data2Url);
+
+    // 1. Lọc tất cả bài nộp của IP này trong kỳ kiểm tra hiện tại (D3)
+    const targetSubmissions = list.filter((s) => {
+      const sIp = extractCleanIp(s.ipAddress);
+      if (!sIp || sIp !== cleanTarget) return false;
+      if (examDateRange) {
+        const subTime = s.endTime || s.startTime || s.timestamp || 0;
+        if (!isDateWithinExamPeriod(subTime, examDateRange)) return false;
+      }
+      return true;
+    });
+
+    const countOnSheet = targetSubmissions.length;
+    const limit = Number(maxSubmissionsPerIp);
+    const hasLimit = enableIpBlocking && !isNaN(limit) && limit > 0;
+    const isOverLimit = hasLimit && countOnSheet >= limit;
+
+    // 2. Danh sách chặn từ Google Sheet data2
     const blockedList = extractBlockedIpsFromSubmissions(list, examDateRange);
-    const isBlocked = blockedList.some((b) => extractCleanIp(b) === cleanTarget);
-    return { isBlocked, blockedList };
+
+    // Kiểm tra xem IP này có hàng nào bị đánh dấu "Chặn" hay không
+    // QUAN TRỌNG: Nếu giáo viên đã "Bỏ chặn" / "Mở chặn" / đổi thành "Bình thường" hoặc xóa chữ "Chặn" ở cột J,
+    // thì isExplicitlyBlocked = false -> HỌC SINH ĐƯỢC PHÉP VÀO LÀM TIẾP!
+    let isExplicitlyBlocked = false;
+    for (const s of targetSubmissions) {
+      const rawStatus = String(s.status || '').trim();
+      if (hasUnblockKeyword(rawStatus) || hasUnblockKeyword(s.ipAddress)) {
+        // Có chỉ định mở chặn rõ ràng từ giáo viên
+        isExplicitlyBlocked = false;
+        break;
+      }
+      if (isStatusBlockedMarker(rawStatus) || hasBlockMarker(s.ipAddress) || (s.isBlocked === true && !hasUnblockKeyword(rawStatus))) {
+        isExplicitlyBlocked = true;
+      }
+    }
+
+    const finalIsBlocked = enableIpBlocking && isExplicitlyBlocked;
+
+    // Danh sách đã làm sạch cho IP này: nếu không bị chặn, loại bỏ khỏi blockedList
+    const cleanedBlockedList = finalIsBlocked
+      ? (blockedList.includes(cleanTarget) ? blockedList : [...blockedList, cleanTarget])
+      : blockedList.filter((b) => extractCleanIp(b) !== cleanTarget);
+
+    return {
+      isBlocked: finalIsBlocked,
+      blockedList: cleanedBlockedList,
+      submissionCountOnSheet: countOnSheet,
+      isOverLimit,
+    };
   } catch (err) {
     console.warn('Lỗi kiểm tra trạng thái chặn trực tiếp trên Sheet:', err);
-    return { isBlocked: false, blockedList: [] };
+    return { isBlocked: false, blockedList: [], submissionCountOnSheet: 0, isOverLimit: false };
   }
 }
 

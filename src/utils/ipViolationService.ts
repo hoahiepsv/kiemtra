@@ -213,25 +213,63 @@ export function sortIpViolations(
 }
 
 /**
- * Kiểm tra xem chuỗi IP hoặc trạng thái có chứa dấu hiệu chặn (Block hoặc Chặn) hay không
+ * Kiểm tra xem chuỗi có chứa từ khóa MỞ CHẶN / BỎ CHẶN / BÌNH THƯỜNG hay không
  */
-export function hasBlockMarker(ipStr: string | null | undefined): boolean {
-  if (!ipStr) return false;
-  return /\bblock(ed)?\b|ch[aặ]n/i.test(String(ipStr));
+export function hasUnblockKeyword(str: string | null | undefined): boolean {
+  if (!str) return false;
+  return /b[oỏ]\s*ch[aặ]n|m[oở]\s*ch[aặ]n|kh[oô]ng\s*ch[aặ]n|h[eê]t\s*ch[aặ]n|unblock(ed)?|b[iì]nh\s*th[uư][oờ]ng|cho\s*ph[eé]p|[dđ][aã]\s*duy[eệ]t|cho\s*l[aà]m\s*l[aạ]i/i.test(String(str));
 }
 
 /**
- * Trích xuất địa chỉ IP thuần (loại bỏ hoàn toàn tiền tố/hậu tố Block, dấu gạch nối thừa...)
- * Ví dụ: "113.169.89.135 - Block", "113.169.89.135 -", "Block - 113.169.89.135" -> "113.169.89.135"
+ * Kiểm tra xem chuỗi trạng thái (Cột J của Google Sheets data2) có phải là trạng thái CHẶN hay không
+ * Nếu chứa các từ khóa MỞ CHẶN / BỎ CHẶN / BÌNH THƯỜNG / UNBLOCK -> chắc chắn KHÔNG BỊ CHẶN!
+ */
+export function isStatusBlockedMarker(statusStr: string | null | undefined): boolean {
+  if (!statusStr) return false;
+  const s = String(statusStr).toLowerCase().trim();
+  if (!s) return false;
+
+  // 1. Nhận diện các từ khóa mở chặn / bình thường do giáo viên nhập
+  if (hasUnblockKeyword(s)) {
+    return false;
+  }
+
+  // 2. Nhận diện các trạng thái chặn thực sự
+  return /(^|[\s\-_:\[(])(ch[aặ]n|[dđ][aã]\s*ch[aặ]n|b[iị]\s*ch[aặ]n|kh[oó]a|t[aạ]m\s*kh[oó]a|vi\s*ph[aạ]m|block(ed)?)([\s\-_:)\]]|$)/i.test(s);
+}
+
+/**
+ * Kiểm tra xem chuỗi IP hoặc chuỗi trạng thái có chứa dấu hiệu chặn (Block hoặc Chặn) hay không
+ * Đảm bảo nếu người dùng nhập "Bỏ chặn" hoặc "Mở chặn" thì KHÔNG bị hiểu nhầm là chặn!
+ */
+export function hasBlockMarker(ipOrStatusStr: string | null | undefined): boolean {
+  if (!ipOrStatusStr) return false;
+  const s = String(ipOrStatusStr).toLowerCase().trim();
+  if (!s) return false;
+
+  if (hasUnblockKeyword(s)) {
+    return false;
+  }
+
+  return /(^|[\s\-_:\[(])(ch[aặ]n|[dđ][aã]\s*ch[aặ]n|b[iị]\s*ch[aặ]n|kh[oó]a|t[aạ]m\s*kh[oó]a|vi\s*ph[aạ]m|block(ed)?)([\s\-_:)\]]|$)/i.test(s);
+}
+
+/**
+ * Trích xuất địa chỉ IP thuần (loại bỏ hoàn toàn tiền tố/hậu tố Block, Bỏ chặn, dấu gạch nối thừa...)
+ * Ví dụ: "113.169.89.135 - Block", "113.169.89.135 - Bỏ chặn" -> "113.169.89.135"
  */
 export function extractCleanIp(ipStr: string | null | undefined): string {
   if (!ipStr) return '';
   let ip = String(ipStr).trim();
-  // Loại bỏ tiền tố: "Block - 113.169...", "Block: 113.169...", "Block 113.169..."
-  ip = ip.replace(/^\s*block(ed)?\s*[-:_]?\s*/gi, '');
-  // Loại bỏ hậu tố: "... - Block", "...: Block", "... Block"
-  ip = ip.replace(/\s*[-:_]?\s*block(ed)?\s*$/gi, '');
-  // Loại bỏ các ký tự dấu gạch nối, hai chấm thừa ở đầu hoặc cuối nếu có
+  // Loại bỏ các hậu tố trạng thái nếu bị dính vào cột IP
+  ip = ip.replace(
+    /\s*[-:_]?\s*(b[oỏ]\s*ch[aặ]n|m[oở]\s*ch[aặ]n|ch[aặ]n|block(ed)?|b[iì]nh\s*th[uư][oờ]ng|vi\s*ph[aạ]m|kh[oó]a|t[aạ]m\s*kh[oó]a)\s*$/gi,
+    ''
+  );
+  ip = ip.replace(
+    /^\s*(b[oỏ]\s*ch[aặ]n|m[oở]\s*ch[aặ]n|ch[aặ]n|block(ed)?|b[iì]nh\s*th[uư][oờ]ng|vi\s*ph[aạ]m|kh[oó]a|t[aạ]m\s*kh[oó]a)\s*[-:_]?\s*/gi,
+    ''
+  );
   ip = ip.replace(/^[-:_,\s]+|[-:_,\s]+$/g, '').trim();
   return normalizeIpAddress(ip);
 }
@@ -247,17 +285,18 @@ export function formatBlockedIpString(ip: string, _style: 'suffix' | 'prefix' = 
 /**
  * Trích xuất toàn bộ danh sách các IP bị chặn từ mảng kết quả bài nộp của Google Sheet data2
  * (Nhận diện qua Cột J - Trạng thái: "Chặn" HOẶC Cột I còn chứa dấu hiệu Block cũ để tương thích ngược)
+ * NGUYÊN TẮC: Nếu giáo viên ghi "Bỏ chặn", "Mở chặn", "Bình thường" hoặc xóa trạng thái Chặn thì IP được giải phóng!
  */
 export function extractBlockedIpsFromSubmissions(
   submissions: { ipAddress?: string; status?: string; isBlocked?: boolean; endTime?: string; startTime?: string; timestamp?: number }[],
   examDateRange?: string | null
 ): string[] {
   if (!Array.isArray(submissions) || submissions.length === 0) return [];
-  const blockedMap = new Map<string, string>();
+  
+  // Nhóm theo từng IP thuần để xác định trạng thái do giáo viên chỉ định
+  const ipStatusMap = new Map<string, boolean>();
+
   for (const s of submissions) {
-    // Nếu có cấu hình khoảng thời gian kỳ kiểm tra (ô D3):
-    // Chỉ các bài nộp phát sinh trong kỳ kiểm tra hiện tại mới tính vi phạm cho kỳ này!
-    // Các vi phạm từ kỳ cũ trước ngày mở kỳ mới sẽ tự động được hoàn nguyên / tính lại từ đầu
     if (examDateRange) {
       const subTime = s.endTime || s.startTime || s.timestamp || 0;
       if (!isDateWithinExamPeriod(subTime, examDateRange)) {
@@ -266,18 +305,79 @@ export function extractBlockedIpsFromSubmissions(
     }
 
     const rawIp = String(s.ipAddress || '').trim();
-    const rawStatus = String(s.status || '').trim();
-    const isStatusBlocked = hasBlockMarker(rawStatus) || s.isBlocked === true;
-    const isIpBlocked = hasBlockMarker(rawIp);
+    const clean = extractCleanIp(rawIp);
+    if (!clean) continue;
 
-    if (isStatusBlocked || isIpBlocked) {
-      const clean = extractCleanIp(rawIp);
-      if (clean) {
-        blockedMap.set(clean, clean);
+    const rawStatus = String(s.status || '').trim();
+    const isStatusBlocked = isStatusBlockedMarker(rawStatus) || (s.isBlocked === true && !hasUnblockKeyword(rawStatus));
+    const isIpBlocked = hasBlockMarker(rawIp);
+    const hasRowBlock = isStatusBlocked || isIpBlocked;
+
+    const isExplicitlyUnblocked = hasUnblockKeyword(rawStatus) || hasUnblockKeyword(rawIp);
+
+    if (isExplicitlyUnblocked) {
+      // Giáo viên đã chủ động ghi "Bỏ chặn" / "Mở chặn" / "Bình thường" -> chắc chắn mở chặn!
+      ipStatusMap.set(clean, false);
+    } else if (hasRowBlock) {
+      // Chỉ đánh dấu chặn nếu dòng này chưa từng có chỉ định mở chặn
+      if (ipStatusMap.get(clean) !== false) {
+        ipStatusMap.set(clean, true);
       }
     }
   }
-  return Array.from(blockedMap.values());
+
+  const blockedList: string[] = [];
+  ipStatusMap.forEach((isBlocked, ip) => {
+    if (isBlocked) {
+      blockedList.push(ip);
+    }
+  });
+
+  return blockedList;
+}
+
+/**
+ * Đếm số lần 1 IP đã làm/nộp bài trong danh sách submissions (lấy từ data2)
+ * Chỉ tính các bài nộp trong kỳ kiểm tra hiện tại (ô D3) nếu có cấu hình
+ */
+export function countIpSubmissionsFromList(
+  submissions: { ipAddress?: string; endTime?: string; startTime?: string; timestamp?: number }[],
+  targetIp: string | null | undefined,
+  examDateRange?: string | null
+): number {
+  if (!Array.isArray(submissions) || !targetIp) return 0;
+  const cleanTarget = extractCleanIp(targetIp);
+  if (!cleanTarget) return 0;
+
+  let count = 0;
+  for (const s of submissions) {
+    if (examDateRange) {
+      const subTime = s.endTime || s.startTime || s.timestamp || 0;
+      if (!isDateWithinExamPeriod(subTime, examDateRange)) {
+        continue;
+      }
+    }
+    const cleanItemIp = extractCleanIp(s.ipAddress);
+    if (cleanItemIp && cleanItemIp === cleanTarget) {
+      count++;
+    }
+  }
+  return count;
+}
+
+/**
+ * Trích xuất toàn bộ các IP bị chặn từ Google Sheets data2:
+ * Chỉ chặn các IP thực sự có đánh dấu Chặn trên Google Sheets data2 (Cột J = "Chặn" hoặc Cột I có dấu Block)
+ * Không tự ý suy diễn chặn đè lên học sinh khi giáo viên đã mở chặn
+ */
+export function extractAllBlockedIpsFromSubmissions(
+  submissions: { ipAddress?: string; status?: string; isBlocked?: boolean; endTime?: string; startTime?: string; timestamp?: number }[],
+  examDateRange?: string | null,
+  _maxSubmissionsPerIp?: number,
+  enableIpBlocking = true
+): string[] {
+  if (enableIpBlocking === false) return [];
+  return extractBlockedIpsFromSubmissions(submissions, examDateRange);
 }
 
 /**
