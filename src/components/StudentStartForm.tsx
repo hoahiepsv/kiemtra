@@ -4,7 +4,7 @@ import { ExamConfig, DraftExam, Question } from '../types';
 import { fetchClientIp } from '../utils/ipService';
 import { formatStudentName, formatClassName } from '../utils/studentFormatting';
 import { isIpBlockedCheck, isIpOverSubmissionLimit, checkAndResetPeriodOnDevice } from '../utils/ipViolationService';
-import { checkLiveIpBlockedOnSheet } from '../utils/syncService';
+import { checkLiveIpBlockedOnSheet, clearIpHistoryAndDeviceEntries } from '../utils/syncService';
 import { checkExamDateStatus, getExamPeriodKey } from '../utils/examDateService';
 
 interface StudentStartFormProps {
@@ -55,6 +55,8 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
   const [clientIp, setClientIp] = useState<string>('');
   const [isLoadingIp, setIsLoadingIp] = useState<boolean>(true);
   const [isCheckingSecurity, setIsCheckingSecurity] = useState<boolean>(false);
+  // Trạng thái kiểm tra thời gian thực từ Google Sheet data2: null = đang tải/chưa rõ, false = được mở chặn, true = bị chặn
+  const [liveBlockedState, setLiveBlockedState] = useState<boolean | null>(null);
 
   // Phân tích trạng thái ngày làm bài (ô D3) và khóa định danh kỳ kiểm tra
   const dateStatus = useMemo(() => checkExamDateStatus(config.examDateRange), [config.examDateRange]);
@@ -70,9 +72,24 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
     checkAndResetPeriodOnDevice(examPeriodKey);
   }, [examPeriodKey]);
 
-  // Tra soát tức thời trong RAM và JSON lịch sử trên máy xem IP thiết bị này có bị Giáo viên chặn hoặc vượt quá số lần làm bài hay không
+  // Tra soát trạng thái chặn:
+  // Nếu có Google Sheets data2: data2 là quyết định tối cao!
+  // Khi data2 đã xác nhận MỞ CHẶN (liveBlockedState === false) -> chắc chắn KHÔNG CHẶN!
   const isDeviceBlocked = useMemo(() => {
     if (!isEffectiveExamActive) return false;
+
+    if (config.data2Url && config.enableIpBlocking !== false) {
+      if (liveBlockedState === false) {
+        return false; // Đã được giáo viên mở chặn trên Google Sheet data2!
+      }
+      if (liveBlockedState === true) {
+        return true; // Đang bị chặn trên Google Sheet data2!
+      }
+      // Khi chưa có kết quả live: chỉ chặn nếu IP nằm trong danh sách chặn hiện tại
+      return isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true);
+    }
+
+    // Nếu chạy độc lập không cấu hình data2 (offline): kiểm tra giới hạn trên máy
     const isManuallyBlocked = isIpBlockedCheck(clientIp, config.blockedIps, config.enableIpBlocking ?? true);
     const isOverLimit = isIpOverSubmissionLimit(
       clientIp,
@@ -82,7 +99,7 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
       examPeriodKey
     );
     return isManuallyBlocked || isOverLimit;
-  }, [clientIp, config.blockedIps, config.enableIpBlocking, config.maxSubmissionsPerIp, config.examDateRange, examPeriodKey, isEffectiveExamActive]);
+  }, [clientIp, config.blockedIps, config.enableIpBlocking, config.maxSubmissionsPerIp, config.examDateRange, config.data2Url, examPeriodKey, isEffectiveExamActive, liveBlockedState]);
 
   // Kiểm tra 1 lần duy nhất ngay khi mở ứng dụng xem SBD/IP này có bị chặn hay không
   useEffect(() => {
@@ -94,9 +111,23 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
 
       if (ip && config.data2Url && config.enableIpBlocking !== false) {
         try {
-          const liveCheck = await checkLiveIpBlockedOnSheet(config.data2Url, ip, config.examDateRange);
-          if (isMounted && onUpdateBlockedIps) {
-            onUpdateBlockedIps(liveCheck.blockedList);
+          const liveCheck = await checkLiveIpBlockedOnSheet(
+            config.data2Url,
+            ip,
+            config.examDateRange,
+            config.maxSubmissionsPerIp,
+            config.enableIpBlocking !== false
+          );
+          if (isMounted) {
+            setLiveBlockedState(liveCheck.isBlocked);
+            if (onUpdateBlockedIps) {
+              onUpdateBlockedIps(liveCheck.blockedList);
+            }
+            if (!liveCheck.isBlocked) {
+              // Giáo viên đã MỞ CHẶN trên data2: xóa sạch lịch sử JSON và bộ đếm cũ trên máy
+              clearIpHistoryAndDeviceEntries(ip);
+              setErrorMessage('');
+            }
           }
         } catch {}
       }
@@ -104,7 +135,7 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [config.data2Url, config.enableIpBlocking, config.examDateRange, onUpdateBlockedIps]);
+  }, [config.data2Url, config.enableIpBlocking, config.examDateRange, config.maxSubmissionsPerIp, onUpdateBlockedIps]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,20 +168,19 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
       } catch {}
     }
 
-    // 1.1. Kiểm tra giới hạn số lần làm bài trên thiết bị (F1) theo kỳ kiểm tra hiện tại (D3)
-    if (isIpOverSubmissionLimit(currentCheckIp, config.maxSubmissionsPerIp, config.enableIpBlocking ?? true, config.examDateRange, examPeriodKey)) {
-      setIsCheckingSecurity(false);
-      setErrorMessage(
-        `⛔ Thí sinh (SBD: ${currentCheckIp || clientIp || 'SBD'}) đã bị tạm khóa vì đã vi phạm quy định làm quá số lần cho phép (${config.maxSubmissionsPerIp || 1} lần)!`
-      );
-      return;
-    }
-
     // 2. KIỂM TRA THỜI GIAN THỰC VỚI GOOGLE SHEET (DATA2) ĐẦU TIÊN:
     // Google Sheet là nguồn chân lý duy nhất, giải quyết triệt để lỗi mở chặn nhưng máy HS không vào được
     if (config.data2Url && config.enableIpBlocking !== false && currentCheckIp) {
       try {
-        const liveCheck = await checkLiveIpBlockedOnSheet(config.data2Url, currentCheckIp, config.examDateRange);
+        const liveCheck = await checkLiveIpBlockedOnSheet(
+          config.data2Url,
+          currentCheckIp,
+          config.examDateRange,
+          config.maxSubmissionsPerIp,
+          config.enableIpBlocking !== false
+        );
+        setLiveBlockedState(liveCheck.isBlocked);
+
         // Đồng bộ danh sách mới nhất về máy học sinh (nếu mở chặn, danh sách sẽ không còn IP này)
         if (onUpdateBlockedIps) {
           onUpdateBlockedIps(liveCheck.blockedList);
@@ -164,6 +194,8 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
           return;
         } else {
           // Giáo viên đã MỞ CHẶN trên Google Sheet thành công!
+          // Xóa sạch lịch sử JSON và bộ đếm cũ trên máy để học sinh tiếp tục làm bài
+          clearIpHistoryAndDeviceEntries(currentCheckIp);
           setErrorMessage('');
         }
       } catch (err) {
@@ -171,18 +203,16 @@ export const StudentStartForm: React.FC<StudentStartFormProps> = ({
         // Nếu không kết nối được tới Sheet, kiểm tra RAM phòng ngừa
         if (isDeviceBlocked || isIpBlockedCheck(currentCheckIp, config.blockedIps, config.enableIpBlocking ?? true)) {
           setIsCheckingSecurity(false);
-          setErrorMessage(
-            `⛔ Thí sinh (SBD: ${currentCheckIp || clientIp || 'SBD'}) đã bị tạm khóa vì đã vi phạm quy định. Vui lòng liên hệ Giáo viên bộ môn để được mở khóa!`
-          );
+          setErrorMessage('⛔ Thiết bị này đang nằm trong danh sách tạm khóa!');
           return;
         }
       }
-    } else {
-      // Nếu không cấu hình Google Sheet, kiểm tra RAM
-      if (isDeviceBlocked || isIpBlockedCheck(currentCheckIp, config.blockedIps, config.enableIpBlocking ?? true)) {
+    } else if (!config.data2Url && config.enableIpBlocking !== false) {
+      // Chỉ khi chạy chế độ offline không có data2 mới kiểm tra giới hạn trên máy
+      if (isIpOverSubmissionLimit(currentCheckIp, config.maxSubmissionsPerIp, config.enableIpBlocking ?? true, config.examDateRange, examPeriodKey)) {
         setIsCheckingSecurity(false);
         setErrorMessage(
-          `⛔ Thí sinh (SBD: ${currentCheckIp || clientIp || 'SBD'}) đã bị tạm khóa vì đã vi phạm quy định. Vui lòng liên hệ Giáo viên bộ môn để được mở khóa!`
+          `⛔ Thí sinh (SBD: ${currentCheckIp || clientIp || 'SBD'}) đã bị tạm khóa vì đã vi phạm quy định làm quá số lần cho phép (${config.maxSubmissionsPerIp || 1} lần)!`
         );
         return;
       }

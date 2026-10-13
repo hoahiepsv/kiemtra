@@ -43,7 +43,7 @@ import {
   removeIpFromBlockedList,
   isValidIpFormat,
 } from '../utils/ipViolationService';
-import { sendIpBlockUpdateToSheet } from '../utils/syncService';
+import { sendIpBlockUpdateToSheet, clearIpHistoryAndDeviceEntries } from '../utils/syncService';
 
 interface ViolationWarningModalProps {
   isOpen: boolean;
@@ -213,11 +213,12 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
     let nextBlocked: string[] = [];
 
     if (isCurrentlyBlocked) {
-      // Mở chặn: loại bỏ IP này khỏi danh sách
+      // Mở chặn: loại bỏ IP này khỏi danh sách và XÓA SẠCH lịch sử JSON / bộ đếm cũ của IP này
       nextBlocked = blockedIpsList.filter((b) => extractCleanIp(b) !== clean);
+      clearIpHistoryAndDeviceEntries(clean);
       setActionMessage({
         type: 'success',
-        text: `Đã mở chặn cho IP ${clean}. Đang đồng bộ lên Google Sheet...`,
+        text: `Đã mở chặn cho IP ${clean} (đã xóa sạch bộ đếm JSON). Đang đồng bộ lên Google Sheet...`,
       });
       if (config.data2Url) {
         handleSaveIpBlockToSheet(clean, false);
@@ -290,6 +291,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
     const nextList = removeIpFromBlockedList(ipToRemove, blockedIpsList);
 
     if (clean) {
+      clearIpHistoryAndDeviceEntries(clean);
       setUnsavedIps((prev) => new Set(prev).add(clean));
       if (config.data2Url) {
         handleSaveIpBlockToSheet(clean, false);
@@ -302,7 +304,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
     });
     setActionMessage({
       type: 'success',
-      text: `Đã gỡ ${clean} khỏi danh sách chặn. Bấm nút "Lưu" (sáng xanh) để lưu vào Google Sheet!`,
+      text: `Đã gỡ ${clean} khỏi danh sách chặn (đã xóa sạch bộ đếm JSON). Bấm nút "Lưu" (sáng xanh) để lưu vào Google Sheet!`,
     });
   };
 
@@ -315,6 +317,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
       oldList.forEach((item) => {
         const clean = extractCleanIp(item);
         if (clean) {
+          clearIpHistoryAndDeviceEntries(clean);
           setUnsavedIps((prev) => new Set(prev).add(clean));
         }
       });
@@ -324,7 +327,7 @@ export const ViolationWarningModal: React.FC<ViolationWarningModalProps> = ({
       });
       setActionMessage({
         type: 'success',
-        text: 'Đã gỡ chặn toàn bộ danh sách IP. Bấm nút "Lưu" (sáng xanh) để lưu vào Google Sheet!',
+        text: 'Đã gỡ chặn toàn bộ danh sách IP (đã xóa sạch bộ đếm JSON). Bấm nút "Lưu" (sáng xanh) để lưu vào Google Sheet!',
       });
     }
   };

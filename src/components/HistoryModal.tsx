@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { SubmissionRecord, ExamConfig } from '../types';
 import { matchSearchQuery } from '../utils/gradeService';
-import { compareSubmissionsNewestFirst, sendIpBlockUpdateToSheet } from '../utils/syncService';
+import { compareSubmissionsNewestFirst, sendIpBlockUpdateToSheet, clearIpHistoryAndDeviceEntries } from '../utils/syncService';
 import { isIpBlockedCheck, extractCleanIp, formatBlockedIpString } from '../utils/ipViolationService';
 
 interface HistoryModalProps {
@@ -79,9 +79,10 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
     let nextBlocked: string[] = [];
     if (isCurrentlyBlocked) {
       nextBlocked = blockedIpsList.filter((b) => extractCleanIp(b) !== clean);
+      clearIpHistoryAndDeviceEntries(clean);
       setToastMsg({
         type: 'success',
-        text: `Đã đổi trạng thái cho IP ${clean} thành MỞ CHẶN. Bấm nút "Lưu" (sáng xanh) để lưu lên Sheet!`,
+        text: `Đã đổi trạng thái cho IP ${clean} thành MỞ CHẶN (đã xóa sạch bộ đếm JSON). Bấm nút "Lưu" (sáng xanh) để lưu lên Sheet!`,
       });
     } else {
       nextBlocked = [...blockedIpsList.filter((b) => extractCleanIp(b) !== clean), clean];
